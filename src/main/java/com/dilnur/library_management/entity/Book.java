@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.Check;
 
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -34,12 +35,18 @@ public class Book {
     @Column(nullable = false)
     private int publicationYear;
 
-    private double price;
+    @Column(nullable = false)
+    private int totalCopies;
 
     @Column(nullable = false)
-    private int total_copies;
+    private int availableCopies;
 
-    @Column(nullable = false)
-    private int available_copies;
+    @ManyToMany(fetch = FetchType.LAZY,cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @JoinTable(
+        name = "book_authors",
+        joinColumns = @JoinColumn(name = "book_id"),
+        inverseJoinColumns = @JoinColumn(name = "author_id"))
+    private List<Author> authors;
+
 
 }

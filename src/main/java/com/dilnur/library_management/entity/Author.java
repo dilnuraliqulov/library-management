@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -26,6 +27,9 @@ public class Author {
 
     @Column(columnDefinition = "TEXT")
     private String bio;
+
+    @ManyToMany(mappedBy = "authors",fetch = FetchType.LAZY)
+    private List<Book> books;
 
     public String getFullName() {
         return fName + " " + lName;

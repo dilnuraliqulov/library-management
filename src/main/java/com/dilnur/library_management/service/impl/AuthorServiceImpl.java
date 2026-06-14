@@ -17,6 +17,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Transactional
+
 public class AuthorServiceImpl implements AuthorService {
 
     private final AuthorMapper authorMapper;
@@ -51,8 +52,8 @@ public class AuthorServiceImpl implements AuthorService {
         Author author = authorRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Author not found with id: " + id));
 
-        author.setFName(authorRequest.firstName());
-        author.setLName(authorRequest.lastName());
+        author.setFirstName(authorRequest.firstName());
+        author.setLastName(authorRequest.lastName());
         author.setBio(authorRequest.bio());
 
         Author updatedAuthor = authorRepository.save(author);

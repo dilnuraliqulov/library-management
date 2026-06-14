@@ -20,10 +20,10 @@ public class Author {
     private UUID id;
 
     @Column(nullable = false,length = 100)
-    private String fName;
+    private String firstName;
 
     @Column(nullable = false,length = 100)
-    private String lName;
+    private String lastName;
 
     @Column(columnDefinition = "TEXT")
     private String bio;

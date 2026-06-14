@@ -32,7 +32,7 @@ public class Author {
     private List<Book> books;
 
     public String getFullName() {
-        return fName + " " + lName;
+        return firstName + " " + lastName;
     }
 
 }

@@ -12,9 +12,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Repository
-public interface ReservationRepository extends JpaRepository<Reservation, UUID>  {
+public interface ReservationRepository extends JpaRepository<Reservation, UUID> {
 
-    List<Reservation> findByBookAndStatusOrderByReservationAtAsc(UUID bookId, ReservationStatus status);
+    List<Reservation> findByBookAndStatusOrderByReservedAtAsc(Book book, ReservationStatus status);
 
     Optional<Reservation> findByMemberAndBookAndStatus(Member member, Book book, ReservationStatus status);
 }

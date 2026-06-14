@@ -16,7 +16,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface LoanRepository extends JpaRepository<Loan, UUID> {
 
-    int countByMemberAndStatus(Member member, List<LoanStatus> statuses);
+    int countByMemberAndStatusIn(Member member, List<LoanStatus> statuses);
 
     Optional<Loan> findByMemberAndBookAndStatus(Member member, Book book, LoanStatus status);
 

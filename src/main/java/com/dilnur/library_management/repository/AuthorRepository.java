@@ -10,6 +10,5 @@ import java.util.UUID;
 @Repository
 public interface AuthorRepository extends JpaRepository<Author, UUID> {
 
-    Optional<Author> findByFNameAndLName(String fName, String lName);
-
+    Optional<Author> findByFirstNameAndLastName(String firstName, String lastName);
 }

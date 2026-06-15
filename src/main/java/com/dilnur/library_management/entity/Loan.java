@@ -1,6 +1,6 @@
 package com.dilnur.library_management.entity;
 
-import com.dilnur.library_management.entity.Enum.LoanStatus;
+import com.dilnur.library_management.entity.enums.LoanStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;

@@ -1,7 +1,7 @@
 package com.dilnur.library_management.repository;
 
 import com.dilnur.library_management.entity.Book;
-import com.dilnur.library_management.entity.Enum.LoanStatus;
+import com.dilnur.library_management.entity.enums.LoanStatus;
 import com.dilnur.library_management.entity.Member;
 import org.springframework.data.jpa.repository.JpaRepository;
 

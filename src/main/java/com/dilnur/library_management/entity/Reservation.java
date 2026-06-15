@@ -1,6 +1,6 @@
 package com.dilnur.library_management.entity;
 
-import com.dilnur.library_management.entity.Enum.ReservationStatus;
+import com.dilnur.library_management.entity.enums.ReservationStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;

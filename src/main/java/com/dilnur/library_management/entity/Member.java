@@ -1,6 +1,6 @@
 package com.dilnur.library_management.entity;
 
-import com.dilnur.library_management.entity.Enum.MemberStatus;
+import com.dilnur.library_management.entity.enums.MemberStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -22,10 +22,10 @@ public class Member {
     private UUID id;
 
     @Column(nullable = false,length = 100)
-    private String fName;
+    private String firstName;
 
     @Column(nullable = false,length = 100)
-    private String lName;
+    private String lastName;
 
     @Column(nullable = false,unique = true,length = 150)
     private String email;

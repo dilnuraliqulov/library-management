@@ -1,4 +1,4 @@
-package com.dilnur.library_management.entity.Enum;
+package com.dilnur.library_management.entity.enums;
 
 public enum LoanStatus {
         ACTIVE,

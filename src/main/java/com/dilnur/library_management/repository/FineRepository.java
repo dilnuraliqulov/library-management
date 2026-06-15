@@ -1,6 +1,6 @@
 package com.dilnur.library_management.repository;
 
-import com.dilnur.library_management.entity.Enum.FineStatus;
+import com.dilnur.library_management.entity.enums.FineStatus;
 import com.dilnur.library_management.entity.Fine;
 import com.dilnur.library_management.entity.Loan;
 import com.dilnur.library_management.entity.Member;

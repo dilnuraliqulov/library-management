@@ -43,6 +43,7 @@ public class AuthorServiceImpl implements AuthorService {
 
     @Override
     public List<AuthorResponse> getAllAuthors() {
+
         return authorMapper.toResponseList(authorRepository.findAll());
     }
 

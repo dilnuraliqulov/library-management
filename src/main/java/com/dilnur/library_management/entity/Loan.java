@@ -42,6 +42,9 @@ public class Loan {
     @Column(nullable = false)
     private LoanStatus status = LoanStatus.ACTIVE;
 
+    @Column(nullable = false)
+    private int extensionCount = 0;
+
 
 
 }

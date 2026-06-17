@@ -32,3 +32,8 @@ library:
     period-days: 14
     extension-days: 7
     max-extensions: 1
+    max-books-per-member: 5
+    max-unpaid-threshold: 15000
+
+  reservation:
+    notification-expiry-days: 3

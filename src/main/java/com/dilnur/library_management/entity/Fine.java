@@ -2,7 +2,7 @@ package com.dilnur.library_management.entity;
 
 import com.dilnur.library_management.entity.enums.FineStatus;
 import jakarta.persistence.*;
-import lombok.Getter;
+        import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 

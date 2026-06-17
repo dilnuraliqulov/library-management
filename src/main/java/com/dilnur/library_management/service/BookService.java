@@ -26,9 +26,11 @@ public interface BookService {
 
     Page<BookResponse> searchByAuthor(String authorName, Pageable pageable);
 
-
     void decreaseAvailableCopies(UUID id);
     void increaseAvailableCopies(UUID id);
 
     Book getBookEntityById(@NotNull(message = "Book id must not be null") UUID uuid);
+
+    void increaseAvailableCopiesOrFulfillReservation(UUID bookId);
+    Book saveBook(Book book);
 }

@@ -68,4 +68,12 @@ public class MemberServiceImpl implements MemberService {
 
         return memberMapper.toResponse(updatedMember);
     }
+
+    @Override
+    public Member getMemberEntityById(UUID uuid) {
+        return memberRepository.findById(uuid)
+                .orElseThrow(() -> new EntityNotFoundException("Member not found with id: " + uuid));
+    }
+
+
 }

@@ -12,6 +12,7 @@ public record BookResponse(
         int publicationYear,
         int totalCopies,
         int availableCopies,
+        int notifiedBooks,
         List<AuthorResponse>authors
 ) {
 }

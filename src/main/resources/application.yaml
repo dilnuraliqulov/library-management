@@ -13,3 +13,22 @@ spring:
 
   liquibase:
     enabled: false
+
+library:
+  fine:
+    rates:
+      STANDARD:
+        daily-rate: 1000
+        grace-days: 0
+      STUDENT:
+        daily-rate: 500
+        grace-days: 1
+      PREMIUM:
+        daily-rate: 0
+        grace-days: 3
+    max-fine-cap-enabled: true
+
+  loan:
+    period-days: 14
+    extension-days: 7
+    max-extensions: 1

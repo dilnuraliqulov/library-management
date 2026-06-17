@@ -34,4 +34,9 @@ public class Fine {
 
     @Column(nullable = false)
     private LocalDate lastCalculatedAt;
+
+    @Column(nullable = false)
+    private boolean capped = false;
+
+
 }

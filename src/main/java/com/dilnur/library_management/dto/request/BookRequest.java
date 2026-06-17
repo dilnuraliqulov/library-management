@@ -2,6 +2,7 @@ package com.dilnur.library_management.dto.request;
 
 import jakarta.validation.constraints.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,12 +25,16 @@ public record BookRequest(
     int publicationYear,
 
     @NotNull
-    @Min(1)
+    @Positive
     int totalCopies,
 
     @NotNull
-    @Min(0)
+    @PositiveOrZero
     int availableCopies,
+
+    @Positive
+    BigDecimal price,
+
 
     @NotEmpty
     List<UUID>authorIds

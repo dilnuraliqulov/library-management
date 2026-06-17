@@ -5,6 +5,8 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
+
 @Component
 @ConfigurationProperties(prefix = "library.loan")
 @Getter
@@ -13,4 +15,7 @@ public class LoanProperties {
     private int periodDays;
     private int extensionDays;
     private int maxExtensions;
+    private int maxBooksPerMember;
+    private BigDecimal maxUnpaidThreshold;
+
 }

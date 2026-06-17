@@ -8,10 +8,11 @@ import java.util.UUID;
 
 public record FineResponse(
         UUID id,
-        UUID loanId,
+        LoanSummary loan,
         BigDecimal amount,
         FineStatus status,
         LocalDate lastCalculatedAt,
         boolean capped
 ) {
+    public record LoanSummary(UUID id, String bookTitle, String memberName, LocalDate dueDate) {}
 }

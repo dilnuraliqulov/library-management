@@ -1,12 +1,16 @@
 package com.dilnur.library_management.service.impl;
 
+import com.dilnur.library_management.config.ReservationProperties;
 import com.dilnur.library_management.dto.request.BookRequest;
 import com.dilnur.library_management.dto.response.BookResponse;
 import com.dilnur.library_management.entity.Author;
 import com.dilnur.library_management.entity.Book;
+import com.dilnur.library_management.entity.Reservation;
+import com.dilnur.library_management.entity.enums.ReservationStatus;
 import com.dilnur.library_management.mapper.BookMapper;
 import com.dilnur.library_management.repository.AuthorRepository;
 import com.dilnur.library_management.repository.BookRepository;
+import com.dilnur.library_management.repository.ReservationRepository;
 import com.dilnur.library_management.service.BookService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +19,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -26,6 +31,8 @@ public class BookServiceImpl implements BookService {
     private final BookRepository bookRepository;
     private final AuthorRepository authorRepository;
     private final BookMapper bookMapper;
+    private final ReservationRepository reservationRepository;
+    private final ReservationProperties reservationProperties;
 
     @Override
     public BookResponse createBook(BookRequest bookRequest) {
@@ -124,5 +131,38 @@ public class BookServiceImpl implements BookService {
     public Book getBookEntityById(UUID uuid) {
         return bookRepository.findById(uuid)
                 .orElseThrow(() -> new EntityNotFoundException("Book not found with id: " + uuid));
+    }
+
+    @Override
+    public void increaseAvailableCopiesOrFulfillReservation(UUID bookId) {
+        Book book = bookRepository.findById(bookId)
+                .orElseThrow(() -> new EntityNotFoundException("Book not found with id: " + bookId));
+
+        List<Reservation> queue = reservationRepository
+                .findByBookAndStatusOrderByReservedAtAsc(book, ReservationStatus.PENDING);
+
+        if (queue.isEmpty()) {
+            // no reservation queue — just increase available copies normally
+            if (book.getAvailableCopies() >= book.getTotalCopies()) {
+                throw new IllegalStateException("Available copies cannot exceed total copies for book: " + book.getTitle());
+            }
+            book.setAvailableCopies(book.getAvailableCopies() + 1);
+        } else {
+            // reservation queue exists — notify first member in queue
+            Reservation nextReservation = queue.get(0);
+            nextReservation.setStatus(ReservationStatus.NOTIFIED);
+            nextReservation.setExpiresAt(LocalDate.now().plusDays(reservationProperties.getNotificationExpiryDays()));
+            reservationRepository.save(nextReservation);
+
+            // increase notifiedBooks instead of availableCopies
+            book.setNotifiedBooks(book.getNotifiedBooks() + 1);
+        }
+
+        bookRepository.save(book);
+    }
+
+    @Override
+    public Book saveBook(Book book) {
+        return bookRepository.save(book);
     }
 }

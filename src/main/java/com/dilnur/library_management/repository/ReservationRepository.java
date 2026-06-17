@@ -4,6 +4,8 @@ import com.dilnur.library_management.entity.Book;
 import com.dilnur.library_management.entity.enums.ReservationStatus;
 import com.dilnur.library_management.entity.Member;
 import com.dilnur.library_management.entity.Reservation;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -17,4 +19,8 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
     List<Reservation> findByBookAndStatusOrderByReservedAtAsc(Book book, ReservationStatus status);
 
     Optional<Reservation> findByMemberAndBookAndStatus(Member member, Book book, ReservationStatus status);
+
+    boolean existsByBookAndStatus(Book book, ReservationStatus status);
+
+    Page<Reservation> findByMemberId(UUID memberId, Pageable pageable);
 }

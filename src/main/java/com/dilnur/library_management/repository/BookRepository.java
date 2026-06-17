@@ -24,6 +24,8 @@ public interface BookRepository extends JpaRepository<Book, UUID> {
     @Query("SELECT b FROM Book b JOIN b.authors a WHERE LOWER(a.firstName) LIKE LOWER(CONCAT('%', :name, '%')) OR LOWER(a.lastName) LIKE LOWER(CONCAT('%', :name, '%'))")
     Page<Book> findByAuthorName(String name, Pageable pageable);
 
-    @Query("SELECT b FROM Book b ORDER BY (b.totalCopies - b.availableCopies) DESC")
+    @Query("SELECT b FROM Book b ORDER BY (b.totalCopies - b.availableCopies - b.notifiedBooks) DESC")
     Page<Book> findMostBorrowedBooks(Pageable pageable);
+
+
 }

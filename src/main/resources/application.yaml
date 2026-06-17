@@ -37,3 +37,11 @@ library:
 
   reservation:
     notification-expiry-days: 3
+
+
+  springdoc:
+    api-docs:
+      path: /v3/api-docs
+    swagger-ui:
+      path: /swagger-ui.html
+      enabled: true

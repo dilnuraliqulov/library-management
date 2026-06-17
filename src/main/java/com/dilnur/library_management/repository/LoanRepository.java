@@ -24,8 +24,9 @@ public interface LoanRepository extends JpaRepository<Loan, UUID> {
 
     List<Loan> findByStatusAndDueDateBefore(LoanStatus status, LocalDate date);
 
-
     @Query("SELECT DISTINCT l.member FROM Loan l where l.status = 'OVERDUE'")
     List<Member> findMembersWithOverdueLoans();
+
+    Optional<Loan> findByMemberAndBookAndStatusIn(Member member, Book book, List<LoanStatus> statuses);
 
 }

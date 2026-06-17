@@ -2,6 +2,8 @@ package com.dilnur.library_management.service;
 
 import com.dilnur.library_management.dto.request.BookRequest;
 import com.dilnur.library_management.dto.response.BookResponse;
+import com.dilnur.library_management.entity.Book;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -28,4 +30,5 @@ public interface BookService {
     void decreaseAvailableCopies(UUID id);
     void increaseAvailableCopies(UUID id);
 
+    Book getBookEntityById(@NotNull(message = "Book id must not be null") UUID uuid);
 }

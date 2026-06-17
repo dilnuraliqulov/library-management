@@ -119,4 +119,10 @@ public class BookServiceImpl implements BookService {
         book.setAvailableCopies(book.getAvailableCopies() + 1);
         bookRepository.save(book);
     }
+
+    @Override
+    public Book getBookEntityById(UUID uuid) {
+        return bookRepository.findById(uuid)
+                .orElseThrow(() -> new EntityNotFoundException("Book not found with id: " + uuid));
+    }
 }

@@ -1,6 +1,7 @@
 package com.dilnur.library_management.entity;
 
 import com.dilnur.library_management.entity.enums.MemberStatus;
+import com.dilnur.library_management.entity.enums.MemberType;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -39,5 +40,9 @@ public class Member {
 
     @Column(nullable = false)
     private BigDecimal unpaidFinesTotal  = BigDecimal.ZERO;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private MemberType memberType = MemberType.STANDARD;
 
 }

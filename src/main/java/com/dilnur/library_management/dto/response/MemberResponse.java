@@ -1,6 +1,7 @@
 package com.dilnur.library_management.dto.response;
 
 import com.dilnur.library_management.entity.enums.MemberStatus;
+import com.dilnur.library_management.entity.enums.MemberType;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -13,6 +14,8 @@ public record MemberResponse (
     String email,
     LocalDate createdAt,
     MemberStatus status,
-    BigDecimal unpaidFinesTotal) {
+    BigDecimal unpaidFinesTotal,
+    MemberType memberType
+    ) {
 
 }

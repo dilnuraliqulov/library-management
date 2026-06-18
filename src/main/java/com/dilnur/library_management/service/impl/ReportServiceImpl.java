@@ -11,6 +11,7 @@ import com.dilnur.library_management.repository.FineRepository;
 import com.dilnur.library_management.repository.LoanRepository;
 import com.dilnur.library_management.service.ReportService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
+@Slf4j
 public class ReportServiceImpl implements ReportService {
 
     private final BookRepository bookRepository;
@@ -33,6 +35,8 @@ public class ReportServiceImpl implements ReportService {
 
     @Override
     public Page<MostBorrowedBookResponse> getMostBorrowedBooks(Pageable pageable) {
+        log.debug("Fetching most borrowed books: page={}, size={}", pageable.getPageNumber(), pageable.getPageSize());
+
         return bookRepository.findMostBorrowedBooks(pageable)
                 .map(book -> new MostBorrowedBookResponse(
                         book.getId(),
@@ -42,11 +46,14 @@ public class ReportServiceImpl implements ReportService {
                         book.getAvailableCopies(),
                         book.getTotalCopies() - book.getAvailableCopies() - book.getNotifiedBooks()
                 ));
+
     }
 
 
     @Override
     public List<OverdueMemberResponse> getMembersWithOverdueLoans() {
+        log.debug("Fetching members with overdue loans");
+
         return loanRepository.findMembersWithOverdueLoansAndCount()
                 .stream()
                 .map(row -> {
@@ -67,6 +74,8 @@ public class ReportServiceImpl implements ReportService {
 
     @Override
     public FineStatisticsResponse getFineStatistics() {
+        log.debug("Fetching fine statistics");
+
         BigDecimal totalUnpaid = fineRepository.totalUnpaidFines();
         BigDecimal totalPaid = fineRepository.totalPaidFines();
         long unpaidCount = fineRepository.countByStatus(FineStatus.UNPAID);

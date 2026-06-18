@@ -8,6 +8,7 @@ import com.dilnur.library_management.repository.AuthorRepository;
 import com.dilnur.library_management.service.AuthorService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,7 +18,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Transactional
-
+@Slf4j
 public class AuthorServiceImpl implements AuthorService {
 
     private final AuthorMapper authorMapper;
@@ -26,29 +27,39 @@ public class AuthorServiceImpl implements AuthorService {
 
     @Override
     public AuthorResponse createAuthor(AuthorRequest authorRequest) {
+        log.info("Creating author: firstName={}, lastName={}", authorRequest.firstName(), authorRequest.lastName());
+
         Author author = authorMapper.toEntity(authorRequest);
 
         Author savedAuthor = authorRepository.save(author);
+
+        log.info("Author created successfully with id={}", savedAuthor.getId());
 
         return authorMapper.toResponse(savedAuthor);
     }
 
     @Override
     public AuthorResponse getAuthorById(UUID id) {
+        log.debug("Fetching author with id={}", id);
+
         Author author = authorRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Author not found with id: " + id));
+
+        log.debug("Author fetched successfully with id={}", id);
 
         return authorMapper.toResponse(author);
     }
 
     @Override
     public List<AuthorResponse> getAllAuthors() {
+        log.debug("Fetching all authors");
 
         return authorMapper.toResponseList(authorRepository.findAll());
     }
 
     @Override
     public AuthorResponse updateAuthor(UUID id, AuthorRequest authorRequest) {
+        log.info("Updating author with id={}", id);
 
         Author author = authorRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Author not found with id: " + id));
@@ -58,17 +69,21 @@ public class AuthorServiceImpl implements AuthorService {
         author.setBio(authorRequest.bio());
 
         Author updatedAuthor = authorRepository.save(author);
+        log.info("Author updated successfully with id={}", id);
 
         return authorMapper.toResponse(updatedAuthor);
     }
 
     @Override
     public void deleteAuthor(UUID id) {
+        log.info("Deleting author with id={}", id);
 
         Author author = authorRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Author not found with id: " + id));
 
         authorRepository.delete(author);
+
+        log.info("Author deleted successfully with id={}", id);
 
     }
 }

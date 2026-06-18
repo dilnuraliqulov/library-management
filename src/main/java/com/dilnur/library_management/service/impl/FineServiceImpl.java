@@ -31,7 +31,6 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-@Transactional
 @Slf4j
 public class FineServiceImpl implements FineService {
 

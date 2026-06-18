@@ -1,0 +1,138 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-create-loans
+      author: dilnur
+      changes:
+        - createTable:
+            tableName: loans
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: member_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: book_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: loaned_at
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: due_date
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: returned_at
+                  type: DATE
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  defaultValue: ACTIVE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: extension_count
+                  type: INT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 005.1-loans-fk-member
+      author: dilnur
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: loans
+            baseColumnNames: member_id
+            referencedTableName: members
+            referencedColumnNames: id
+            constraintName: fk_loans_member
+            onDelete: RESTRICT
+
+  - changeSet:
+      id: 005.2-loans-fk-book
+      author: dilnur
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: loans
+            baseColumnNames: book_id
+            referencedTableName: books
+            referencedColumnNames: id
+            constraintName: fk_loans_book
+            onDelete: RESTRICT
+
+  - changeSet:
+      id: 005.3-loans-check-status
+      author: dilnur
+      changes:
+        - sql:
+            sql: >
+              ALTER TABLE loans
+              ADD CONSTRAINT chk_loans_status
+              CHECK (status IN ('ACTIVE', 'RETURNED', 'OVERDUE'));
+      rollback:
+        - sql:
+            sql: ALTER TABLE loans DROP CONSTRAINT chk_loans_status;
+
+  - changeSet:
+      id: 005.4-loans-check-extension-count
+      author: dilnur
+      changes:
+        - sql:
+            sql: >
+              ALTER TABLE loans
+              ADD CONSTRAINT chk_loans_extension_count
+              CHECK (extension_count >= 0);
+      rollback:
+        - sql:
+            sql: ALTER TABLE loans DROP CONSTRAINT chk_loans_extension_count;
+
+  - changeSet:
+      id: 005.5-loans-index-member-status
+      author: dilnur
+      changes:
+        - createIndex:
+            indexName: idx_loans_member_status
+            tableName: loans
+            columns:
+              - column:
+                  name: member_id
+              - column:
+                  name: status
+
+  - changeSet:
+      id: 005.6-loans-index-status-due-date
+      author: dilnur
+      changes:
+        - createIndex:
+            indexName: idx_loans_status_due_date
+            tableName: loans
+            columns:
+              - column:
+                  name: status
+              - column:
+                  name: due_date
+
+  - changeSet:
+      id: 005.7-loans-index-book-status
+      author: dilnur
+      changes:
+        - createIndex:
+            indexName: idx_loans_book_status
+            tableName: loans
+            columns:
+              - column:
+                  name: book_id
+              - column:
+                  name: status

@@ -1,0 +1,92 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-create-books
+      author: dilnur
+      changes:
+        - createTable:
+            tableName: books
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: title
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: isbn
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uc_books_isbn
+              - column:
+                  name: genre
+                  type: VARCHAR(100)
+              - column:
+                  name: publication_year
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: total_copies
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: available_copies
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: notified_books
+                  type: INT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: price
+                  type: DECIMAL(10,2)
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 002.1-books-check-available-copies
+      author: dilnur
+      changes:
+        - sql:
+            sql: >
+              ALTER TABLE books
+              ADD CONSTRAINT chk_books_available_copies
+              CHECK (available_copies >= 0 AND available_copies <= total_copies);
+      rollback:
+        - sql:
+            sql: ALTER TABLE books DROP CONSTRAINT chk_books_available_copies;
+
+  - changeSet:
+      id: 002.2-books-check-notified-books
+      author: dilnur
+      changes:
+        - sql:
+            sql: >
+              ALTER TABLE books
+              ADD CONSTRAINT chk_books_notified_books
+              CHECK (notified_books >= 0);
+      rollback:
+        - sql:
+            sql: ALTER TABLE books DROP CONSTRAINT chk_books_notified_books;
+
+  - changeSet:
+      id: 002.3-books-index-title
+      author: dilnur
+      changes:
+        - createIndex:
+            indexName: idx_books_title
+            tableName: books
+            columns:
+              - column:
+                  name: title

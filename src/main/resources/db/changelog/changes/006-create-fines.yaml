@@ -1,0 +1,92 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-create-fines
+      author: dilnur
+      changes:
+        - createTable:
+            tableName: fines
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: loan_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uc_fines_loan_id
+              - column:
+                  name: amount
+                  type: DECIMAL(10,2)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  defaultValue: UNPAID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_calculated_at
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: capped
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 006.1-fines-fk-loan
+      author: dilnur
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: fines
+            baseColumnNames: loan_id
+            referencedTableName: loans
+            referencedColumnNames: id
+            constraintName: fk_fines_loan
+            onDelete: CASCADE
+
+  - changeSet:
+      id: 006.2-fines-check-status
+      author: dilnur
+      changes:
+        - sql:
+            sql: >
+              ALTER TABLE fines
+              ADD CONSTRAINT chk_fines_status
+              CHECK (status IN ('UNPAID', 'PAID'));
+      rollback:
+        - sql:
+            sql: ALTER TABLE fines DROP CONSTRAINT chk_fines_status;
+
+  - changeSet:
+      id: 006.3-fines-check-amount
+      author: dilnur
+      changes:
+        - sql:
+            sql: >
+              ALTER TABLE fines
+              ADD CONSTRAINT chk_fines_amount
+              CHECK (amount >= 0);
+      rollback:
+        - sql:
+            sql: ALTER TABLE fines DROP CONSTRAINT chk_fines_amount;
+
+  - changeSet:
+      id: 006.4-fines-index-status
+      author: dilnur
+      changes:
+        - createIndex:
+            indexName: idx_fines_status
+            tableName: fines
+            columns:
+              - column:
+                  name: status

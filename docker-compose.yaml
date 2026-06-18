@@ -4,9 +4,9 @@ services:
     container_name: library-postgres
 
     environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-librarymanagementdb}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-myadmin1234}
 
     ports:
       - "5432:5432"
@@ -32,9 +32,9 @@ services:
         condition: service_healthy
 
     environment:
-      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
-      DB_USERNAME: ${DB_USERNAME}
-      DB_PASSWORD: ${DB_PASSWORD}
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-librarymanagementdb}
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-myadmin1234}
       LIQUIBASE_ENABLED: "true"
 
     ports:

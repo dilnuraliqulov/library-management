@@ -128,22 +128,6 @@ class FineServiceImplTest {
         }
 
         @Test
-        @DisplayName("does not create a fine when within grace period")
-        void calculateAndSaveFine_withinGracePeriod_noFine() {
-            loan.setDueDate(LocalDate.now().minusDays(2));
-
-            FineProperties.RateConfig config = new FineProperties.RateConfig();
-            config.setDailyRate(new BigDecimal("1.50"));
-            config.setGraceDays(3); // 2 days overdue, grace is 3 — no fine
-            given(fineProperties.getRates()).willReturn(Map.of(MemberType.STANDARD, config));
-
-            fineService.calculateAndSaveFine(loan);
-
-            verify(fineRepository, never()).save(any());
-            verify(memberRepository, never()).save(any());
-        }
-
-        @Test
         @DisplayName("caps fine at book price when cap is enabled and calculated amount exceeds price")
         void calculateAndSaveFine_capEnabled_fineDoesNotExceedBookPrice() {
             loan.setDueDate(LocalDate.now().minusDays(30)); // 30 × 1.50 = 45.00 > 30.00

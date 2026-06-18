@@ -1,0 +1,80 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-create-members
+      author: dilnur
+      changes:
+        - createTable:
+            tableName: members
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: first_name
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_name
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: email
+                  type: VARCHAR(150)
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uc_members_email
+              - column:
+                  name: created_at
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  defaultValue: ACTIVE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: unpaid_fines_total
+                  type: DECIMAL(10,2)
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: member_type
+                  type: VARCHAR(20)
+                  defaultValue: STANDARD
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 004.1-members-check-status
+      author: dilnur
+      changes:
+        - sql:
+            sql: >
+              ALTER TABLE members
+              ADD CONSTRAINT chk_members_status
+              CHECK (status IN ('ACTIVE', 'BLOCKED'));
+      rollback:
+        - sql:
+            sql: ALTER TABLE members DROP CONSTRAINT chk_members_status;
+
+  - changeSet:
+      id: 004.2-members-check-member-type
+      author: dilnur
+      changes:
+        - sql:
+            sql: >
+              ALTER TABLE members
+              ADD CONSTRAINT chk_members_member_type
+              CHECK (member_type IN ('STANDARD', 'STUDENT', 'PREMIUM'));
+      rollback:
+        - sql:
+            sql: ALTER TABLE members DROP CONSTRAINT chk_members_member_type;

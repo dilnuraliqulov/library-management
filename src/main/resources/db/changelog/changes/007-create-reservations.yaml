@@ -1,0 +1,103 @@
+databaseChangeLog:
+  - changeSet:
+      id: 007-create-reservations
+      author: dilnur
+      changes:
+        - createTable:
+            tableName: reservations
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: member_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: book_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: reserved_at
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: expires_at
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  defaultValue: PENDING
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 007.1-reservations-fk-member
+      author: dilnur
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: reservations
+            baseColumnNames: member_id
+            referencedTableName: members
+            referencedColumnNames: id
+            constraintName: fk_reservations_member
+            onDelete: RESTRICT
+
+  - changeSet:
+      id: 007.2-reservations-fk-book
+      author: dilnur
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: reservations
+            baseColumnNames: book_id
+            referencedTableName: books
+            referencedColumnNames: id
+            constraintName: fk_reservations_book
+            onDelete: RESTRICT
+
+  - changeSet:
+      id: 007.3-reservations-check-status
+      author: dilnur
+      changes:
+        - sql:
+            sql: >
+              ALTER TABLE reservations
+              ADD CONSTRAINT chk_reservations_status
+              CHECK (status IN ('PENDING', 'NOTIFIED', 'FULFILLED', 'CANCELLED'));
+      rollback:
+        - sql:
+            sql: ALTER TABLE reservations DROP CONSTRAINT chk_reservations_status;
+
+  - changeSet:
+      id: 007.4-reservations-index-book-status
+      author: dilnur
+      changes:
+        - createIndex:
+            indexName: idx_reservations_book_status
+            tableName: reservations
+            columns:
+              - column:
+                  name: book_id
+              - column:
+                  name: status
+              - column:
+                  name: reserved_at
+
+  - changeSet:
+      id: 007.5-reservations-index-member-id
+      author: dilnur
+      changes:
+        - createIndex:
+            indexName: idx_reservations_member_id
+            tableName: reservations
+            columns:
+              - column:
+                  name: member_id

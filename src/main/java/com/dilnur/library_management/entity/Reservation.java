@@ -31,7 +31,7 @@ public class Reservation {
     @Column(nullable = false,updatable = false)
     private LocalDate reservedAt = LocalDate.now();
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private LocalDate expiresAt;
 
     @Enumerated(EnumType.STRING)

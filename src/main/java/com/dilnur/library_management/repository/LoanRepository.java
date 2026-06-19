@@ -31,4 +31,14 @@ public interface LoanRepository extends JpaRepository<Loan, UUID> {
 
     @Query("SELECT l.member, COUNT(l) FROM Loan l WHERE l.status = 'OVERDUE' GROUP BY l.member")
     List<Object[]> findMembersWithOverdueLoansAndCount();
+
+    long countByBookAndStatusIn(
+            Book book,
+            List<LoanStatus> statuses
+    );
+
+    boolean existsByBookAndStatusIn(
+            Book book,
+            List<LoanStatus> statuses
+    );
 }

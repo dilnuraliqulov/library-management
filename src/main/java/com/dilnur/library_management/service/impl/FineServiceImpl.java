@@ -1,18 +1,21 @@
 package com.dilnur.library_management.service.impl;
 
 import com.dilnur.library_management.config.FineProperties;
+import com.dilnur.library_management.config.LoanProperties;
+import com.dilnur.library_management.config.ReservationProperties;
 import com.dilnur.library_management.dto.response.FineResponse;
-import com.dilnur.library_management.entity.Book;
-import com.dilnur.library_management.entity.Fine;
-import com.dilnur.library_management.entity.Loan;
-import com.dilnur.library_management.entity.Member;
+import com.dilnur.library_management.entity.*;
 import com.dilnur.library_management.entity.enums.FineStatus;
 import com.dilnur.library_management.entity.enums.LoanStatus;
 import com.dilnur.library_management.entity.enums.MemberStatus;
+import com.dilnur.library_management.entity.enums.ReservationStatus;
+import com.dilnur.library_management.exception.BusinessRuleException;
 import com.dilnur.library_management.mapper.FineMapper;
 import com.dilnur.library_management.repository.FineRepository;
 import com.dilnur.library_management.repository.LoanRepository;
 import com.dilnur.library_management.repository.MemberRepository;
+import com.dilnur.library_management.repository.ReservationRepository;
+import com.dilnur.library_management.service.BookService;
 import com.dilnur.library_management.service.FineService;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +35,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@Transactional
 public class FineServiceImpl implements FineService {
 
     private final FineRepository fineRepository;
@@ -39,6 +43,10 @@ public class FineServiceImpl implements FineService {
     private final MemberRepository memberRepository;
     private final FineMapper fineMapper;
     private final FineProperties fineProperties;
+    private final LoanProperties loanProperties;
+    private final ReservationRepository reservationRepository;
+    private final ReservationProperties reservationProperties;
+    private final BookService bookService;
 
 
     @Override
@@ -47,7 +55,7 @@ public class FineServiceImpl implements FineService {
                 .orElseThrow(() -> new EntityNotFoundException("Fine not found with id: " + fineId));
 
         if (fine.getStatus() == FineStatus.PAID) {
-            throw new IllegalStateException("Fine is already paid");
+            throw new BusinessRuleException("Fine is already paid");
         }
 
         fine.setStatus(FineStatus.PAID);
@@ -59,10 +67,10 @@ public class FineServiceImpl implements FineService {
 
         // if member was BLOCKED due to fines, unblock them if no more unpaid fines
         if (member.getStatus() == MemberStatus.BLOCKED
-                && member.getUnpaidFinesTotal().compareTo(BigDecimal.ZERO) <= 0) {
+                && member.getUnpaidFinesTotal().compareTo(loanProperties.getMaxUnpaidThreshold()) < 0) {
             member.setStatus(MemberStatus.ACTIVE);
-            member.setUnpaidFinesTotal(BigDecimal.ZERO); // prevent negative
-            log.info("Member {} unblocked after paying all fines", member.getId());
+            log.info("Member {} unblocked — unpaidFinesTotal={} is below threshold={}",
+                    member.getId(), member.getUnpaidFinesTotal(), loanProperties.getMaxUnpaidThreshold());
         }
 
         memberRepository.save(member);
@@ -72,29 +80,64 @@ public class FineServiceImpl implements FineService {
     // ─── Task 4 — Scheduled job ───────────────────────────────────────────────
 
     @Override
-    @Scheduled(cron = "0 0 0 * * *") // runs every day at midnight
-    @Transactional
+    @Scheduled(cron = "0 0 0 * * *")
     public void updateOverdueFines() {
         log.info("Running daily fine update job");
 
+        // existing fine update logic...
         List<Loan> overdueLoans = loanRepository
                 .findByStatusAndDueDateBefore(LoanStatus.ACTIVE, LocalDate.now());
 
         for (Loan loan : overdueLoans) {
-            // mark loan as OVERDUE — idempotent, safe to call multiple times
             loan.setStatus(LoanStatus.OVERDUE);
             loanRepository.save(loan);
-
             calculateAndSaveFine(loan);
         }
 
-        // also update already-OVERDUE loans (in case job ran before but fine needs recalculation)
         List<Loan> alreadyOverdue = loanRepository.findByStatus(LoanStatus.OVERDUE);
         for (Loan loan : alreadyOverdue) {
             calculateAndSaveFine(loan);
         }
 
+        // expire NOTIFIED reservations that member didn't claim in time
+        expireNotifiedReservations();
+
         log.info("Daily fine update job completed");
+    }
+
+    private void expireNotifiedReservations() {
+        List<Reservation> expiredReservations = reservationRepository
+                .findByStatusAndExpiresAtBefore(ReservationStatus.NOTIFIED, LocalDate.now());
+
+        for (Reservation reservation : expiredReservations) {
+            reservation.setStatus(ReservationStatus.CANCELLED);
+            reservationRepository.save(reservation);
+
+            Book book = reservation.getBook();
+            book.setNotifiedBooks(Math.max(0, book.getNotifiedBooks() - 1));
+
+            // notify next in queue
+            List<Reservation> queue = reservationRepository
+                    .findByBookAndStatusOrderByReservedAtAsc(book, ReservationStatus.PENDING);
+
+            if (queue.isEmpty()) {
+                // no one waiting — return copy to available pool
+                book.setAvailableCopies(book.getAvailableCopies() + 1);
+                bookService.saveBook(book);
+            } else {
+                // notify next member
+                Reservation next = queue.get(0);
+                next.setStatus(ReservationStatus.NOTIFIED);
+                next.setExpiresAt(LocalDate.now().plusDays(reservationProperties.getNotificationExpiryDays()));
+                reservationRepository.save(next);
+                book.setNotifiedBooks(book.getNotifiedBooks() + 1);
+                bookService.saveBook(book);
+                log.info("Next member {} notified for book {}", next.getMember().getId(), book.getId());
+            }
+
+            log.info("Expired NOTIFIED reservation {} for member {} and book {}",
+                    reservation.getId(), reservation.getMember().getId(), book.getId());
+        }
     }
 
     // ─── Called from LoanService on return ───────────────────────────────────
@@ -128,12 +171,26 @@ public class FineServiceImpl implements FineService {
 
         fineRepository.findByLoan(loan).ifPresentOrElse(
                 existing -> {
-                    // fine exists — just update amount (idempotent)
+                    if (existing.getStatus() == FineStatus.PAID) {
+                        log.info("Fine for loan {} is already paid — skipping recalculation", loan.getId());
+                        return;
+                    }
+
+                    BigDecimal oldAmount = existing.getAmount();
+                    BigDecimal delta = finalAmount.subtract(oldAmount);
+
                     existing.setAmount(finalAmount);
                     existing.setLastCalculatedAt(LocalDate.now());
                     existing.setCapped(finalCapped);
                     fineRepository.save(existing);
-                    log.info("Updated fine for loan {}: amount={}", loan.getId(), finalAmount);
+
+                    if (delta.compareTo(BigDecimal.ZERO) != 0) {
+                        member.setUnpaidFinesTotal(member.getUnpaidFinesTotal().add(delta));
+                        blockMemberIfThresholdExceeded(member); // ← single call
+                        memberRepository.save(member);
+                        log.info("Updated fine for loan {}: oldAmount={}, newAmount={}, delta={}",
+                                loan.getId(), oldAmount, finalAmount, delta);
+                    }
                 },
                 () -> {
                     // fine doesn't exist — create new one
@@ -146,8 +203,10 @@ public class FineServiceImpl implements FineService {
                     fineRepository.save(fine);
 
                     member.setUnpaidFinesTotal(member.getUnpaidFinesTotal().add(finalAmount));
+                    blockMemberIfThresholdExceeded(member); // ← single call
                     memberRepository.save(member);
                     log.info("Created fine for loan {}: amount={}", loan.getId(), finalAmount);
+
                 }
         );
     }
@@ -173,5 +232,13 @@ public class FineServiceImpl implements FineService {
     public Page<FineResponse> getFinesByMember(UUID memberId, Pageable pageable) {
         return fineRepository.findByLoanMemberId(memberId, pageable)
                 .map(fineMapper::toResponse);
+    }
+    private void blockMemberIfThresholdExceeded(Member member) {
+        if (member.getStatus() == MemberStatus.ACTIVE
+                && member.getUnpaidFinesTotal().compareTo(loanProperties.getMaxUnpaidThreshold()) >= 0) {
+            member.setStatus(MemberStatus.BLOCKED);
+            log.info("Member {} automatically blocked — unpaidFinesTotal={} exceeds threshold={}",
+                    member.getId(), member.getUnpaidFinesTotal(), loanProperties.getMaxUnpaidThreshold());
+        }
     }
 }

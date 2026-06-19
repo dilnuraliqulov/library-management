@@ -28,9 +28,6 @@ public record BookRequest(
     @Positive
     int totalCopies,
 
-    @NotNull
-    @PositiveOrZero
-    int availableCopies,
 
     @Positive
     BigDecimal price,

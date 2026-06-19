@@ -6,10 +6,13 @@ import com.dilnur.library_management.dto.response.BookResponse;
 import com.dilnur.library_management.entity.Author;
 import com.dilnur.library_management.entity.Book;
 import com.dilnur.library_management.entity.Reservation;
+import com.dilnur.library_management.entity.enums.LoanStatus;
 import com.dilnur.library_management.entity.enums.ReservationStatus;
+import com.dilnur.library_management.exception.BusinessRuleException;
 import com.dilnur.library_management.mapper.BookMapper;
 import com.dilnur.library_management.repository.AuthorRepository;
 import com.dilnur.library_management.repository.BookRepository;
+import com.dilnur.library_management.repository.LoanRepository;
 import com.dilnur.library_management.repository.ReservationRepository;
 import com.dilnur.library_management.service.BookService;
 import jakarta.persistence.EntityNotFoundException;
@@ -35,6 +38,7 @@ public class BookServiceImpl implements BookService {
     private final BookMapper bookMapper;
     private final ReservationRepository reservationRepository;
     private final ReservationProperties reservationProperties;
+    private final LoanRepository loanRepository;
 
     @Override
     public BookResponse createBook(BookRequest bookRequest) {
@@ -80,23 +84,58 @@ public class BookServiceImpl implements BookService {
         log.info("Updating book with id={}", id);
 
         Book book = bookRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Book not found with id: " + id));
+                .orElseThrow(() ->
+                        new EntityNotFoundException("Book not found with id: " + id));
+
+        long activeLoans = loanRepository.countByBookAndStatusIn(
+                book,
+                List.of(
+                        LoanStatus.ACTIVE,
+                        LoanStatus.OVERDUE
+                )
+        );
+
+        int allocatedCopies =
+                (int) activeLoans + book.getNotifiedBooks();
+
+        if (bookRequest.totalCopies() < allocatedCopies) {
+            throw new BusinessRuleException(
+                    "Total copies cannot be less than allocated copies: "
+                            + allocatedCopies
+            );
+        }
 
         book.setTitle(bookRequest.title());
         book.setIsbn(bookRequest.isbn());
         book.setGenre(bookRequest.genre());
         book.setPublicationYear(bookRequest.publicationYear());
-        book.setTotalCopies(bookRequest.totalCopies());
-        book.setAvailableCopies(bookRequest.availableCopies());
 
-        List<Author> authors = authorRepository.findAllById(bookRequest.authorIds());
+        book.setTotalCopies(bookRequest.totalCopies());
+
+        book.setAvailableCopies(
+                bookRequest.totalCopies() - allocatedCopies
+        );
+
+        List<Author> authors = authorRepository.findAllById(
+                bookRequest.authorIds()
+        );
+
         if (authors.size() != bookRequest.authorIds().size()) {
-            throw new EntityNotFoundException("One or more authors not found");
+            throw new EntityNotFoundException(
+                    "One or more authors not found"
+            );
         }
+
         book.setAuthors(authors);
 
         Book updated = bookRepository.save(book);
-        log.info("Book updated successfully with id={}", id);
+
+        log.info(
+                "Book updated successfully with id={}, totalCopies={}, availableCopies={}",
+                id,
+                updated.getTotalCopies(),
+                updated.getAvailableCopies()
+        );
 
         return bookMapper.toResponse(updated);
     }
@@ -134,34 +173,24 @@ public class BookServiceImpl implements BookService {
     public void decreaseAvailableCopies(UUID id) {
         log.debug("Decreasing available copies for bookId={}", id);
 
-        Book book = bookRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Book not found with id: " + id));
+        int updatedRows = bookRepository.decrementAvailableCopies(id);
 
-        if (book.getAvailableCopies() <= 0) {
-            throw new IllegalStateException("No available copies for book: " + book.getTitle());
+        if (updatedRows == 0) {
+            throw new BusinessRuleException(
+                    "No available copies for this book");
         }
-
-        book.setAvailableCopies(book.getAvailableCopies() - 1);
-        log.debug("Available copies decreased for bookId={}, remaining={}", id, book.getAvailableCopies());
-
-        bookRepository.save(book);
     }
 
     @Override
     public void increaseAvailableCopies(UUID id) {
         log.debug("Increasing available copies for bookId={}", id);
 
-        Book book = bookRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Book not found with id: " + id));
+        int updatedRows = bookRepository.incrementAvailableCopies(id);
 
-        if (book.getAvailableCopies() >= book.getTotalCopies()) {
-            throw new IllegalStateException("Available copies cannot exceed total copies for book: " + book.getTitle());
+        if (updatedRows == 0) {
+            throw new BusinessRuleException(
+                    "Available copies cannot exceed total copies");
         }
-
-        book.setAvailableCopies(book.getAvailableCopies() + 1);
-        log.debug("Available copies increased for bookId={}, now={}", id, book.getAvailableCopies());
-
-        bookRepository.save(book);
     }
 
     @Override
@@ -177,29 +206,45 @@ public class BookServiceImpl implements BookService {
         log.debug("Processing copy return for bookId={}", bookId);
 
         Book book = bookRepository.findById(bookId)
-                .orElseThrow(() -> new EntityNotFoundException("Book not found with id: " + bookId));
+                .orElseThrow(() ->
+                        new EntityNotFoundException("Book not found with id: " + bookId));
 
         List<Reservation> queue = reservationRepository
-                .findByBookAndStatusOrderByReservedAtAsc(book, ReservationStatus.PENDING);
+                .findByBookAndStatusOrderByReservedAtAsc(
+                        book,
+                        ReservationStatus.PENDING
+                );
 
         if (queue.isEmpty()) {
-            // no reservation queue — just increase available copies normally
-            if (book.getAvailableCopies() >= book.getTotalCopies()) {
-                throw new IllegalStateException("Available copies cannot exceed total copies for book: " + book.getTitle());
-            }
-            book.setAvailableCopies(book.getAvailableCopies() + 1);
-        } else {
-            // reservation queue exists — notify first member in queue
-            Reservation nextReservation = queue.get(0);
-            nextReservation.setStatus(ReservationStatus.NOTIFIED);
-            nextReservation.setExpiresAt(LocalDate.now().plusDays(reservationProperties.getNotificationExpiryDays()));
-            reservationRepository.save(nextReservation);
 
-            // increase notifiedBooks instead of availableCopies
-            book.setNotifiedBooks(book.getNotifiedBooks() + 1);
+            int updatedRows = bookRepository.incrementAvailableCopies(bookId);
+
+            if (updatedRows == 0) {
+                throw new BusinessRuleException(
+                        "Available copies cannot exceed total copies for book: "
+                                + book.getTitle());
+            }
+
+            return;
         }
 
+        Reservation nextReservation = queue.get(0);
+        nextReservation.setStatus(ReservationStatus.NOTIFIED);
+        nextReservation.setExpiresAt(
+                LocalDate.now()
+                        .plusDays(reservationProperties.getNotificationExpiryDays())
+        );
+
+        reservationRepository.save(nextReservation);
+
+        book.setNotifiedBooks(book.getNotifiedBooks() + 1);
         bookRepository.save(book);
+
+        log.info(
+                "Reservation {} notified for book {}",
+                nextReservation.getId(),
+                bookId
+        );
     }
 
     @Override

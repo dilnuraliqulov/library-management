@@ -32,6 +32,9 @@ public class Loan {
     @Column(nullable = false,updatable = false)
     private LocalDate loanedAt = LocalDate.now();
 
+    @Column(name = "original_due_date", nullable = false, updatable = false)
+    private LocalDate originalDueDate;
+
     @Column(nullable = false)
     private LocalDate dueDate;
 

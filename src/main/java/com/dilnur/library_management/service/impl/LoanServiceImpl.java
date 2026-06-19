@@ -69,6 +69,8 @@ public class LoanServiceImpl implements LoanService {
 
         Book book = bookService.getBookEntityById(request.bookId());
 
+        LocalDate dueDate = LocalDate.now().plusDays(loanProperties.getPeriodDays());
+
         // check if member has a NOTIFIED reservation for this book
         Optional<Reservation> notifiedReservation = reservationRepository
                 .findByMemberAndBookAndStatus(member, book, ReservationStatus.NOTIFIED);
@@ -87,7 +89,8 @@ public class LoanServiceImpl implements LoanService {
             Loan loan = new Loan();
             loan.setMember(member);
             loan.setBook(book);
-            loan.setDueDate(LocalDate.now().plusDays(loanProperties.getPeriodDays()));
+            loan.setDueDate(dueDate);
+            loan.setOriginalDueDate(dueDate);
             loan.setStatus(LoanStatus.ACTIVE);
 
             Loan saved = loanRepository.save(loan);
@@ -98,16 +101,16 @@ public class LoanServiceImpl implements LoanService {
         Loan loan = new Loan();
         loan.setMember(member);
         loan.setBook(book);
-        loan.setDueDate(LocalDate.now().plusDays(loanProperties.getPeriodDays()));
+        loan.setDueDate(dueDate);
+        loan.setOriginalDueDate(dueDate);
         loan.setStatus(LoanStatus.ACTIVE);
 
         bookService.decreaseAvailableCopies(book.getId());
 
         Loan saved = loanRepository.save(loan);
         return loanMapper.toResponse(saved);
+
     }
-
-
     @Override
     public LoanResponse returnBook(UUID memberId, UUID bookId) {
 

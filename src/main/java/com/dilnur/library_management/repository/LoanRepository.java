@@ -43,4 +43,6 @@ public interface LoanRepository extends JpaRepository<Loan, UUID> {
     );
 
     boolean existsByMemberAndStatusIn(Member member, List<LoanStatus> statuses);
+
+    List<Loan> findByStatusInAndDueDateBeforeAndReturnedAtIsNull(List<LoanStatus> statuses, LocalDate date);
 }

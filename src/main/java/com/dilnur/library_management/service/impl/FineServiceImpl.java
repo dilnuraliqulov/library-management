@@ -61,11 +61,11 @@ public class FineServiceImpl implements FineService {
         fine.setStatus(FineStatus.PAID);
         fineRepository.save(fine);
 
-        // update member's unpaidFinesTotal
         Member member = fine.getLoan().getMember();
-        member.setUnpaidFinesTotal(member.getUnpaidFinesTotal().subtract(fine.getAmount()));
 
-        // if member was BLOCKED due to fines, unblock them if no more unpaid fines
+        BigDecimal actualUnpaidTotal = fineRepository.sumUnpaidByMember(member);
+        member.setUnpaidFinesTotal(actualUnpaidTotal);
+
         if (member.getStatus() == MemberStatus.BLOCKED
                 && member.getUnpaidFinesTotal().compareTo(loanProperties.getMaxUnpaidThreshold()) < 0) {
             member.setStatus(MemberStatus.ACTIVE);
@@ -84,19 +84,13 @@ public class FineServiceImpl implements FineService {
         log.info("Running daily fine update job");
 
         List<Loan> overdueLoans = loanRepository
-                .findByStatusAndDueDateBefore(LoanStatus.ACTIVE, LocalDate.now());
+                .findByStatusInAndDueDateBeforeAndReturnedAtIsNull(
+                        List.of(LoanStatus.ACTIVE, LoanStatus.OVERDUE), LocalDate.now());
 
         for (Loan loan : overdueLoans) {
-            loan.setStatus(LoanStatus.OVERDUE);
-            loanRepository.save(loan);
-            calculateAndSaveFine(loan);
-        }
-
-        List<Loan> alreadyOverdue = loanRepository.findByStatus(LoanStatus.OVERDUE);
-        for (Loan loan : alreadyOverdue) {
-            if (loan.getReturnedAt() != null) {
-                log.debug("Skipping loan {} — returnedAt is set, being processed by returnBook()", loan.getId());
-                continue;
+            if (loan.getStatus() == LoanStatus.ACTIVE) {
+                loan.setStatus(LoanStatus.OVERDUE);
+                loanRepository.save(loan);
             }
             calculateAndSaveFine(loan);
         }
@@ -185,12 +179,12 @@ public class FineServiceImpl implements FineService {
                     fineRepository.save(existing);
 
                     if (delta.compareTo(BigDecimal.ZERO) != 0) {
-                        BigDecimal newTotal = member.getUnpaidFinesTotal().add(delta);
-                        member.setUnpaidFinesTotal(newTotal.max(BigDecimal.ZERO));
+                        BigDecimal actualUnpaidTotal = fineRepository.sumUnpaidByMember(member);
+                        member.setUnpaidFinesTotal(actualUnpaidTotal);
                         blockMemberIfThresholdExceeded(member);
                         memberRepository.save(member);
-                        log.info("Updated fine for loan {}: oldAmount={}, newAmount={}, delta={}",
-                                loan.getId(), oldAmount, finalAmount, delta);
+                        log.info("Updated fine for loan {}: oldAmount={}, newAmount={}",
+                                loan.getId(), oldAmount, finalAmount);
                     }
                 },
                 () -> {
@@ -202,7 +196,8 @@ public class FineServiceImpl implements FineService {
                     fine.setCapped(finalCapped);
                     fineRepository.save(fine);
 
-                    member.setUnpaidFinesTotal(member.getUnpaidFinesTotal().add(finalAmount));
+                    BigDecimal actualUnpaidTotal = fineRepository.sumUnpaidByMember(member);
+                    member.setUnpaidFinesTotal(actualUnpaidTotal);
                     blockMemberIfThresholdExceeded(member);
                     memberRepository.save(member);
                     log.info("Created fine for loan {}: amount={}", loan.getId(), finalAmount);

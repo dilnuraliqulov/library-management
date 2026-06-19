@@ -123,9 +123,8 @@ public class LoanServiceImpl implements LoanService {
         loan.setStatus(LoanStatus.RETURNED);
         Loan updated = loanRepository.save(loan);
 
-        // delegate to FineService — single source of truth
-        if (LocalDate.now().isAfter(loan.getDueDate())) {
-            fineService.calculateAndSaveFine(loan);  // ← delegate, don't duplicate
+        if (loan.getReturnedAt() != null && loan.getReturnedAt().isAfter(loan.getDueDate())) {
+            fineService.calculateAndSaveFine(loan);
         }
 
         bookService.increaseAvailableCopiesOrFulfillReservation(book.getId());

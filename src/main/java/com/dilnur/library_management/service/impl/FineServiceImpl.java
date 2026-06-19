@@ -77,14 +77,12 @@ public class FineServiceImpl implements FineService {
         return fineMapper.toResponse(fine);
     }
 
-    // ─── Task 4 — Scheduled job ───────────────────────────────────────────────
 
     @Override
     @Scheduled(cron = "0 0 0 * * *")
     public void updateOverdueFines() {
         log.info("Running daily fine update job");
 
-        // existing fine update logic...
         List<Loan> overdueLoans = loanRepository
                 .findByStatusAndDueDateBefore(LoanStatus.ACTIVE, LocalDate.now());
 
@@ -96,10 +94,13 @@ public class FineServiceImpl implements FineService {
 
         List<Loan> alreadyOverdue = loanRepository.findByStatus(LoanStatus.OVERDUE);
         for (Loan loan : alreadyOverdue) {
+            if (loan.getReturnedAt() != null) {
+                log.debug("Skipping loan {} — returnedAt is set, being processed by returnBook()", loan.getId());
+                continue;
+            }
             calculateAndSaveFine(loan);
         }
 
-        // expire NOTIFIED reservations that member didn't claim in time
         expireNotifiedReservations();
 
         log.info("Daily fine update job completed");
@@ -140,7 +141,6 @@ public class FineServiceImpl implements FineService {
         }
     }
 
-    // ─── Called from LoanService on return ───────────────────────────────────
 
     @Override
     public void calculateAndSaveFine(Loan loan) {
@@ -185,15 +185,15 @@ public class FineServiceImpl implements FineService {
                     fineRepository.save(existing);
 
                     if (delta.compareTo(BigDecimal.ZERO) != 0) {
-                        member.setUnpaidFinesTotal(member.getUnpaidFinesTotal().add(delta));
-                        blockMemberIfThresholdExceeded(member); // ← single call
+                        BigDecimal newTotal = member.getUnpaidFinesTotal().add(delta);
+                        member.setUnpaidFinesTotal(newTotal.max(BigDecimal.ZERO));
+                        blockMemberIfThresholdExceeded(member);
                         memberRepository.save(member);
                         log.info("Updated fine for loan {}: oldAmount={}, newAmount={}, delta={}",
                                 loan.getId(), oldAmount, finalAmount, delta);
                     }
                 },
                 () -> {
-                    // fine doesn't exist — create new one
                     Fine fine = new Fine();
                     fine.setLoan(loan);
                     fine.setAmount(finalAmount);
@@ -203,13 +203,13 @@ public class FineServiceImpl implements FineService {
                     fineRepository.save(fine);
 
                     member.setUnpaidFinesTotal(member.getUnpaidFinesTotal().add(finalAmount));
-                    blockMemberIfThresholdExceeded(member); // ← single call
+                    blockMemberIfThresholdExceeded(member);
                     memberRepository.save(member);
                     log.info("Created fine for loan {}: amount={}", loan.getId(), finalAmount);
-
                 }
         );
     }
+
 
     // General read
 

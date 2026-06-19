@@ -7,6 +7,7 @@ import com.dilnur.library_management.entity.Author;
 import com.dilnur.library_management.entity.Book;
 import com.dilnur.library_management.entity.Reservation;
 import com.dilnur.library_management.entity.enums.ReservationStatus;
+import com.dilnur.library_management.exception.BusinessRuleException;
 import com.dilnur.library_management.mapper.BookMapper;
 import com.dilnur.library_management.repository.AuthorRepository;
 import com.dilnur.library_management.repository.BookRepository;
@@ -138,7 +139,7 @@ public class BookServiceImpl implements BookService {
                 .orElseThrow(() -> new EntityNotFoundException("Book not found with id: " + id));
 
         if (book.getAvailableCopies() <= 0) {
-            throw new IllegalStateException("No available copies for book: " + book.getTitle());
+            throw new BusinessRuleException("No available copies for book: " + book.getTitle());
         }
 
         book.setAvailableCopies(book.getAvailableCopies() - 1);
@@ -155,7 +156,7 @@ public class BookServiceImpl implements BookService {
                 .orElseThrow(() -> new EntityNotFoundException("Book not found with id: " + id));
 
         if (book.getAvailableCopies() >= book.getTotalCopies()) {
-            throw new IllegalStateException("Available copies cannot exceed total copies for book: " + book.getTitle());
+            throw new BusinessRuleException("Available copies cannot exceed total copies for book: " + book.getTitle());
         }
 
         book.setAvailableCopies(book.getAvailableCopies() + 1);
@@ -185,7 +186,7 @@ public class BookServiceImpl implements BookService {
         if (queue.isEmpty()) {
             // no reservation queue — just increase available copies normally
             if (book.getAvailableCopies() >= book.getTotalCopies()) {
-                throw new IllegalStateException("Available copies cannot exceed total copies for book: " + book.getTitle());
+                throw new BusinessRuleException("Available copies cannot exceed total copies for book: " + book.getTitle());
             }
             book.setAvailableCopies(book.getAvailableCopies() + 1);
         } else {

@@ -9,6 +9,7 @@ import com.dilnur.library_management.entity.enums.FineStatus;
 import com.dilnur.library_management.entity.enums.LoanStatus;
 import com.dilnur.library_management.entity.enums.MemberStatus;
 import com.dilnur.library_management.entity.enums.ReservationStatus;
+import com.dilnur.library_management.exception.BusinessRuleException;
 import com.dilnur.library_management.mapper.FineMapper;
 import com.dilnur.library_management.repository.FineRepository;
 import com.dilnur.library_management.repository.LoanRepository;
@@ -53,7 +54,7 @@ public class FineServiceImpl implements FineService {
                 .orElseThrow(() -> new EntityNotFoundException("Fine not found with id: " + fineId));
 
         if (fine.getStatus() == FineStatus.PAID) {
-            throw new IllegalStateException("Fine is already paid");
+            throw new BusinessRuleException("Fine is already paid");
         }
 
         fine.setStatus(FineStatus.PAID);

@@ -6,6 +6,7 @@ import com.dilnur.library_management.dto.response.ReservationResponse;
 import com.dilnur.library_management.entity.*;
 import com.dilnur.library_management.entity.enums.MemberStatus;
 import com.dilnur.library_management.entity.enums.ReservationStatus;
+import com.dilnur.library_management.exception.BusinessRuleException;
 import com.dilnur.library_management.mapper.ReservationMapper;
 import com.dilnur.library_management.repository.ReservationRepository;
 import com.dilnur.library_management.service.BookService;
@@ -42,18 +43,18 @@ public class ReservationServiceImpl implements ReservationService {
 
         // member must be ACTIVE to reserve
         if (member.getStatus() == MemberStatus.BLOCKED) {
-            throw new IllegalStateException("Blocked members cannot make reservations");
+            throw new BusinessRuleException("Blocked members cannot make reservations");
         }
 
         // prevent duplicate reservation
         reservationRepository.findByMemberAndBookAndStatus(member, book, ReservationStatus.PENDING)
                 .ifPresent(r -> {
-                    throw new IllegalStateException("Member already has a pending reservation for this book");
+                    throw new BusinessRuleException("Member already has a pending reservation for this book");
                 });
 
         // reservation only makes sense when no copies are available
         if (book.getAvailableCopies() > 0) {
-            throw new IllegalStateException(
+            throw new BusinessRuleException(
                     "Book has available copies — borrow it directly instead of reserving");
         }
 
@@ -77,7 +78,7 @@ public class ReservationServiceImpl implements ReservationService {
 
         if (reservation.getStatus() == ReservationStatus.FULFILLED
                 || reservation.getStatus() == ReservationStatus.CANCELLED) {
-            throw new IllegalStateException(
+            throw new BusinessRuleException(
                     "Cannot cancel a reservation with status: " + reservation.getStatus());
         }
 

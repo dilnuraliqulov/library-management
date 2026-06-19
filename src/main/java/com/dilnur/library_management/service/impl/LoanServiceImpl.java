@@ -9,6 +9,7 @@ import com.dilnur.library_management.entity.enums.FineStatus;
 import com.dilnur.library_management.entity.enums.LoanStatus;
 import com.dilnur.library_management.entity.enums.MemberStatus;
 import com.dilnur.library_management.entity.enums.ReservationStatus;
+import com.dilnur.library_management.exception.BusinessRuleException;
 import com.dilnur.library_management.mapper.LoanMapper;
 import com.dilnur.library_management.repository.FineRepository;
 import com.dilnur.library_management.repository.LoanRepository;
@@ -53,17 +54,17 @@ public class LoanServiceImpl implements LoanService {
         Member member = memberService.getMemberEntityById(request.memberId());
 
         if (member.getStatus() == MemberStatus.BLOCKED) {
-            throw new IllegalStateException("Member is blocked and cannot borrow books");
+            throw new BusinessRuleException("Member is blocked and cannot borrow books");
         }
 
         int activeLoans = loanRepository.countByMemberAndStatusIn(
                 member, List.of(LoanStatus.ACTIVE, LoanStatus.OVERDUE));
         if (activeLoans >= loanProperties.getMaxBooksPerMember()) {
-            throw new IllegalStateException("Member has reached the maximum number of borrowed books");
+            throw new BusinessRuleException("Member has reached the maximum number of borrowed books");
         }
 
         if (member.getUnpaidFinesTotal().compareTo(loanProperties.getMaxUnpaidThreshold()) >= 0) {
-            throw new IllegalStateException("Member has unpaid fines exceeding the allowed limit");
+            throw new BusinessRuleException("Member has unpaid fines exceeding the allowed limit");
         }
 
         Book book = bookService.getBookEntityById(request.bookId());
@@ -96,7 +97,7 @@ public class LoanServiceImpl implements LoanService {
 
         // no NOTIFIED reservation — normal borrow flow
         if (book.getAvailableCopies() <= 0) {
-            throw new IllegalStateException("No available copies for book: " + book.getTitle());
+            throw new BusinessRuleException("No available copies for book: " + book.getTitle());
         }
 
         Loan loan = new Loan();
@@ -145,22 +146,22 @@ public class LoanServiceImpl implements LoanService {
                 .orElseThrow(() -> new EntityNotFoundException("Loan not found with id: " + loanId));
 
         if (loan.getStatus() != LoanStatus.ACTIVE) {
-            throw new IllegalStateException("Only active loans can be extended");
+            throw new BusinessRuleException("Only active loans can be extended");
         }
 
         if (LocalDate.now().isAfter(loan.getDueDate())) {
-            throw new IllegalStateException("Cannot extend an already overdue loan");
+            throw new BusinessRuleException("Cannot extend an already overdue loan");
         }
 
         if (loan.getExtensionCount() >= loanProperties.getMaxExtensions()) {
-            throw new IllegalStateException("Maximum number of extensions reached for this loan");
+            throw new BusinessRuleException("Maximum number of extensions reached for this loan");
         }
 
         boolean hasPendingReservation = reservationRepository
                 .existsByBookAndStatus(loan.getBook(), ReservationStatus.PENDING);
 
         if (hasPendingReservation) {
-            throw new IllegalStateException("Cannot extend — another member is waiting for this book");
+            throw new BusinessRuleException("Cannot extend — another member is waiting for this book");
         }
 
         loan.setDueDate(loan.getDueDate().plusDays(loanProperties.getExtensionDays()));

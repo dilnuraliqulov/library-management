@@ -6,11 +6,13 @@ import com.dilnur.library_management.dto.response.BookResponse;
 import com.dilnur.library_management.entity.Author;
 import com.dilnur.library_management.entity.Book;
 import com.dilnur.library_management.entity.Reservation;
+import com.dilnur.library_management.entity.enums.LoanStatus;
 import com.dilnur.library_management.entity.enums.ReservationStatus;
 import com.dilnur.library_management.exception.BusinessRuleException;
 import com.dilnur.library_management.mapper.BookMapper;
 import com.dilnur.library_management.repository.AuthorRepository;
 import com.dilnur.library_management.repository.BookRepository;
+import com.dilnur.library_management.repository.LoanRepository;
 import com.dilnur.library_management.repository.ReservationRepository;
 import com.dilnur.library_management.service.BookService;
 import jakarta.persistence.EntityNotFoundException;
@@ -36,6 +38,7 @@ public class BookServiceImpl implements BookService {
     private final BookMapper bookMapper;
     private final ReservationRepository reservationRepository;
     private final ReservationProperties reservationProperties;
+    private final LoanRepository loanRepository;
 
     @Override
     public BookResponse createBook(BookRequest bookRequest) {
@@ -81,23 +84,58 @@ public class BookServiceImpl implements BookService {
         log.info("Updating book with id={}", id);
 
         Book book = bookRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Book not found with id: " + id));
+                .orElseThrow(() ->
+                        new EntityNotFoundException("Book not found with id: " + id));
+
+        long activeLoans = loanRepository.countByBookAndStatusIn(
+                book,
+                List.of(
+                        LoanStatus.ACTIVE,
+                        LoanStatus.OVERDUE
+                )
+        );
+
+        int allocatedCopies =
+                (int) activeLoans + book.getNotifiedBooks();
+
+        if (bookRequest.totalCopies() < allocatedCopies) {
+            throw new BusinessRuleException(
+                    "Total copies cannot be less than allocated copies: "
+                            + allocatedCopies
+            );
+        }
 
         book.setTitle(bookRequest.title());
         book.setIsbn(bookRequest.isbn());
         book.setGenre(bookRequest.genre());
         book.setPublicationYear(bookRequest.publicationYear());
-        book.setTotalCopies(bookRequest.totalCopies());
-        book.setAvailableCopies(bookRequest.availableCopies());
 
-        List<Author> authors = authorRepository.findAllById(bookRequest.authorIds());
+        book.setTotalCopies(bookRequest.totalCopies());
+
+        book.setAvailableCopies(
+                bookRequest.totalCopies() - allocatedCopies
+        );
+
+        List<Author> authors = authorRepository.findAllById(
+                bookRequest.authorIds()
+        );
+
         if (authors.size() != bookRequest.authorIds().size()) {
-            throw new EntityNotFoundException("One or more authors not found");
+            throw new EntityNotFoundException(
+                    "One or more authors not found"
+            );
         }
+
         book.setAuthors(authors);
 
         Book updated = bookRepository.save(book);
-        log.info("Book updated successfully with id={}", id);
+
+        log.info(
+                "Book updated successfully with id={}, totalCopies={}, availableCopies={}",
+                id,
+                updated.getTotalCopies(),
+                updated.getAvailableCopies()
+        );
 
         return bookMapper.toResponse(updated);
     }

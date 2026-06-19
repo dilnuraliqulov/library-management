@@ -31,7 +31,7 @@ databaseChangeLog:
                   name: expires_at
                   type: DATE
                   constraints:
-                    nullable: false
+                    nullable: true
               - column:
                   name: status
                   type: VARCHAR(20)

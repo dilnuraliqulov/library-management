@@ -61,7 +61,7 @@ public class ReservationServiceImpl implements ReservationService {
         reservation.setMember(member);
         reservation.setBook(book);
         reservation.setStatus(ReservationStatus.PENDING);
-        reservation.setExpiresAt(null); // set later when notified
+
 
         Reservation saved = reservationRepository.save(reservation);
         log.info("Member {} reserved book {}", member.getId(), book.getId());

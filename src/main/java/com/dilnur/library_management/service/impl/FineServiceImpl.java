@@ -2,18 +2,19 @@ package com.dilnur.library_management.service.impl;
 
 import com.dilnur.library_management.config.FineProperties;
 import com.dilnur.library_management.config.LoanProperties;
+import com.dilnur.library_management.config.ReservationProperties;
 import com.dilnur.library_management.dto.response.FineResponse;
-import com.dilnur.library_management.entity.Book;
-import com.dilnur.library_management.entity.Fine;
-import com.dilnur.library_management.entity.Loan;
-import com.dilnur.library_management.entity.Member;
+import com.dilnur.library_management.entity.*;
 import com.dilnur.library_management.entity.enums.FineStatus;
 import com.dilnur.library_management.entity.enums.LoanStatus;
 import com.dilnur.library_management.entity.enums.MemberStatus;
+import com.dilnur.library_management.entity.enums.ReservationStatus;
 import com.dilnur.library_management.mapper.FineMapper;
 import com.dilnur.library_management.repository.FineRepository;
 import com.dilnur.library_management.repository.LoanRepository;
 import com.dilnur.library_management.repository.MemberRepository;
+import com.dilnur.library_management.repository.ReservationRepository;
+import com.dilnur.library_management.service.BookService;
 import com.dilnur.library_management.service.FineService;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +42,9 @@ public class FineServiceImpl implements FineService {
     private final FineMapper fineMapper;
     private final FineProperties fineProperties;
     private final LoanProperties loanProperties;
+    private final ReservationRepository reservationRepository;
+    private final ReservationProperties reservationProperties;
+    private final BookService bookService;
 
 
     @Override
@@ -74,29 +78,65 @@ public class FineServiceImpl implements FineService {
     // ─── Task 4 — Scheduled job ───────────────────────────────────────────────
 
     @Override
-    @Scheduled(cron = "0 0 0 * * *") // runs every day at midnight
+    @Scheduled(cron = "0 0 0 * * *")
     @Transactional
     public void updateOverdueFines() {
         log.info("Running daily fine update job");
 
+        // existing fine update logic...
         List<Loan> overdueLoans = loanRepository
                 .findByStatusAndDueDateBefore(LoanStatus.ACTIVE, LocalDate.now());
 
         for (Loan loan : overdueLoans) {
-            // mark loan as OVERDUE — idempotent, safe to call multiple times
             loan.setStatus(LoanStatus.OVERDUE);
             loanRepository.save(loan);
-
             calculateAndSaveFine(loan);
         }
 
-        // also update already-OVERDUE loans (in case job ran before but fine needs recalculation)
         List<Loan> alreadyOverdue = loanRepository.findByStatus(LoanStatus.OVERDUE);
         for (Loan loan : alreadyOverdue) {
             calculateAndSaveFine(loan);
         }
 
+        // expire NOTIFIED reservations that member didn't claim in time
+        expireNotifiedReservations();
+
         log.info("Daily fine update job completed");
+    }
+
+    private void expireNotifiedReservations() {
+        List<Reservation> expiredReservations = reservationRepository
+                .findByStatusAndExpiresAtBefore(ReservationStatus.NOTIFIED, LocalDate.now());
+
+        for (Reservation reservation : expiredReservations) {
+            reservation.setStatus(ReservationStatus.CANCELLED);
+            reservationRepository.save(reservation);
+
+            Book book = reservation.getBook();
+            book.setNotifiedBooks(Math.max(0, book.getNotifiedBooks() - 1));
+
+            // notify next in queue
+            List<Reservation> queue = reservationRepository
+                    .findByBookAndStatusOrderByReservedAtAsc(book, ReservationStatus.PENDING);
+
+            if (queue.isEmpty()) {
+                // no one waiting — return copy to available pool
+                book.setAvailableCopies(book.getAvailableCopies() + 1);
+                bookService.saveBook(book);
+            } else {
+                // notify next member
+                Reservation next = queue.get(0);
+                next.setStatus(ReservationStatus.NOTIFIED);
+                next.setExpiresAt(LocalDate.now().plusDays(reservationProperties.getNotificationExpiryDays()));
+                reservationRepository.save(next);
+                book.setNotifiedBooks(book.getNotifiedBooks() + 1);
+                bookService.saveBook(book);
+                log.info("Next member {} notified for book {}", next.getMember().getId(), book.getId());
+            }
+
+            log.info("Expired NOTIFIED reservation {} for member {} and book {}",
+                    reservation.getId(), reservation.getMember().getId(), book.getId());
+        }
     }
 
     // ─── Called from LoanService on return ───────────────────────────────────

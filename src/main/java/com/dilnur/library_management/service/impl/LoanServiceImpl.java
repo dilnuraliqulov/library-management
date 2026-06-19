@@ -15,6 +15,7 @@ import com.dilnur.library_management.repository.LoanRepository;
 import com.dilnur.library_management.repository.MemberRepository;
 import com.dilnur.library_management.repository.ReservationRepository;
 import com.dilnur.library_management.service.BookService;
+import com.dilnur.library_management.service.FineService;
 import com.dilnur.library_management.service.LoanService;
 import com.dilnur.library_management.service.MemberService;
 import jakarta.persistence.EntityNotFoundException;
@@ -29,6 +30,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -43,7 +45,7 @@ public class LoanServiceImpl implements LoanService {
     private final BookService bookService;
     private final LoanMapper loanMapper;
     private final LoanProperties loanProperties;
-    private final FineServiceImpl fineService;
+    private final FineService fineService;
 
     @Override
     public LoanResponse issueBook(LoanRequest request) {
@@ -66,6 +68,33 @@ public class LoanServiceImpl implements LoanService {
 
         Book book = bookService.getBookEntityById(request.bookId());
 
+        // check if member has a NOTIFIED reservation for this book
+        Optional<Reservation> notifiedReservation = reservationRepository
+                .findByMemberAndBookAndStatus(member, book, ReservationStatus.NOTIFIED);
+
+        if (notifiedReservation.isPresent()) {
+            // member is claiming their reserved copy — fulfill the reservation
+            Reservation reservation = notifiedReservation.get();
+            reservation.setStatus(ReservationStatus.FULFILLED);
+            reservationRepository.save(reservation);
+
+            // decrease notifiedBooks — this copy was being held for this member
+            book.setNotifiedBooks(Math.max(0, book.getNotifiedBooks() - 1));
+            bookService.saveBook(book);
+
+            // create loan directly — no availableCopies check needed
+            Loan loan = new Loan();
+            loan.setMember(member);
+            loan.setBook(book);
+            loan.setDueDate(LocalDate.now().plusDays(loanProperties.getPeriodDays()));
+            loan.setStatus(LoanStatus.ACTIVE);
+
+            Loan saved = loanRepository.save(loan);
+            log.info("Reservation FULFILLED for member {} and book {}", member.getId(), book.getId());
+            return loanMapper.toResponse(saved);
+        }
+
+        // no NOTIFIED reservation — normal borrow flow
         if (book.getAvailableCopies() <= 0) {
             throw new IllegalStateException("No available copies for book: " + book.getTitle());
         }

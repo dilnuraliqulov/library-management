@@ -38,15 +38,12 @@ import java.util.UUID;
 public class LoanServiceImpl implements LoanService {
 
     private final LoanRepository loanRepository;
-    private final FineRepository fineRepository;
     private final ReservationRepository reservationRepository;
-    private final MemberRepository memberRepository;
     private final MemberService memberService;
     private final BookService bookService;
     private final LoanMapper loanMapper;
     private final LoanProperties loanProperties;
-    private final FineProperties fineProperties;
-
+    private final FineServiceImpl fineService;
 
     @Override
     public LoanResponse issueBook(LoanRequest request) {
@@ -101,12 +98,11 @@ public class LoanServiceImpl implements LoanService {
         loan.setStatus(LoanStatus.RETURNED);
         Loan updated = loanRepository.save(loan);
 
-        // calculate fine if overdue
+        // delegate to FineService — single source of truth
         if (LocalDate.now().isAfter(loan.getDueDate())) {
-            calculateAndSaveFine(loan, member, book);
+            fineService.calculateAndSaveFine(loan);  // ← delegate, don't duplicate
         }
 
-        // increase copies or notify next in reservation queue
         bookService.increaseAvailableCopiesOrFulfillReservation(book.getId());
 
         return loanMapper.toResponse(updated);
@@ -159,69 +155,5 @@ public class LoanServiceImpl implements LoanService {
         return loanMapper.toResponsePage(loanRepository.findAll(pageable));
     }
 
-    // Private helpers
-    private void calculateAndSaveFine(Loan loan, Member member, Book book) {
-        FineProperties.RateConfig rateConfig = fineProperties.getRates().get(member.getMemberType());
 
-        long overdueDays = ChronoUnit.DAYS.between(loan.getDueDate(), LocalDate.now());
-        long chargeableDays = Math.max(0, overdueDays - rateConfig.getGraceDays());
-
-        if (chargeableDays == 0) {
-            log.info("Loan {} is within grace period — no fine applied", loan.getId());
-            return;
-        }
-
-        BigDecimal amount = rateConfig.getDailyRate().multiply(BigDecimal.valueOf(chargeableDays));
-
-        // cap fine at book price
-        boolean isCapped = false;
-        if (fineProperties.isMaxFineCapEnabled() && amount.compareTo(book.getPrice()) >= 0) {
-            amount = book.getPrice();
-            isCapped = true;
-        }
-
-        final BigDecimal finalAmount = amount;
-        final boolean finalCapped = isCapped;
-
-        fineRepository.findByLoan(loan).ifPresentOrElse(
-                existing -> {
-                    // only update if fine is still UNPAID — don't touch PAID fines
-                    if (existing.getStatus() == FineStatus.PAID) {
-                        log.info("Fine for loan {} is already paid — skipping recalculation", loan.getId());
-                        return;
-                    }
-
-                    BigDecimal oldAmount = existing.getAmount();
-                    BigDecimal delta = finalAmount.subtract(oldAmount); // how much the fine grew
-
-                    existing.setAmount(finalAmount);
-                    existing.setLastCalculatedAt(LocalDate.now());
-                    existing.setCapped(finalCapped);
-                    fineRepository.save(existing);
-
-                    // update member's unpaidFinesTotal by the delta
-                    if (delta.compareTo(BigDecimal.ZERO) != 0) {
-
-                        member.setUnpaidFinesTotal(member.getUnpaidFinesTotal().add(delta));
-                        memberRepository.save(member);
-                        log.info("Updated fine for loan {}: oldAmount={}, newAmount={}, delta={}",
-                                loan.getId(), oldAmount, finalAmount, delta);
-                    }
-                },
-                () -> {
-                    // fine doesn't exist — create new one (no change here)
-                    Fine fine = new Fine();
-                    fine.setLoan(loan);
-                    fine.setAmount(finalAmount);
-                    fine.setStatus(FineStatus.UNPAID);
-                    fine.setLastCalculatedAt(LocalDate.now());
-                    fine.setCapped(finalCapped);
-                    fineRepository.save(fine);
-
-                    member.setUnpaidFinesTotal(member.getUnpaidFinesTotal().add(finalAmount));
-                    memberRepository.save(member);
-                    log.info("Created fine for loan {}: amount={}", loan.getId(), finalAmount);
-                }
-        );
-    }
 }

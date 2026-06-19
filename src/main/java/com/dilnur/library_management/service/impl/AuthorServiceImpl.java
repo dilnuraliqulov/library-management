@@ -11,6 +11,8 @@ import com.dilnur.library_management.service.AuthorService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,10 +56,10 @@ public class AuthorServiceImpl implements AuthorService {
     }
 
     @Override
-    public List<AuthorResponse> getAllAuthors() {
-        log.debug("Fetching all authors");
-
-        return authorMapper.toResponseList(authorRepository.findAll());
+    @Transactional(readOnly = true)
+    public Page<AuthorResponse> getAllAuthors(Pageable pageable) {
+        log.debug("Fetching authors page={}, size={}", pageable.getPageNumber(), pageable.getPageSize());
+        return authorMapper.toResponsePage(authorRepository.findAll(pageable));
     }
 
     @Override

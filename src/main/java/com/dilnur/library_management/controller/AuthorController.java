@@ -13,6 +13,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -74,13 +76,16 @@ public class AuthorController {
             @ApiResponse(responseCode = "200", description = "Authors fetched successfully",
                     content = @Content(schema = @Schema(implementation = AuthorResponse.class)))
     })
+
     @GetMapping
-    public ResponseEntity<List<AuthorResponse>> getAllAuthors() {
-        log.info("Received request to fetch all authors");
+    public ResponseEntity<Page<AuthorResponse>> getAllAuthors(Pageable pageable) {
+        log.info("Received request to fetch authors — page={}, size={}",
+                pageable.getPageNumber(), pageable.getPageSize());
 
-        List<AuthorResponse> responses = authorService.getAllAuthors();
+        Page<AuthorResponse> responses = authorService.getAllAuthors(pageable);
 
-        log.info("Fetched {} authors", responses.size());
+        log.info("Fetched {} authors (page {} of {})",
+                responses.getNumberOfElements(), responses.getNumber() + 1, responses.getTotalPages());
 
         return ResponseEntity.ok(responses);
     }

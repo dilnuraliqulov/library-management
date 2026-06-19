@@ -35,6 +35,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@Transactional
 public class FineServiceImpl implements FineService {
 
     private final FineRepository fineRepository;
@@ -80,7 +81,6 @@ public class FineServiceImpl implements FineService {
 
     @Override
     @Scheduled(cron = "0 0 0 * * *")
-    @Transactional
     public void updateOverdueFines() {
         log.info("Running daily fine update job");
 

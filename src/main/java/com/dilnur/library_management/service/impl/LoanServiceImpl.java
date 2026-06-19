@@ -185,12 +185,31 @@ public class LoanServiceImpl implements LoanService {
 
         fineRepository.findByLoan(loan).ifPresentOrElse(
                 existing -> {
+                    // only update if fine is still UNPAID — don't touch PAID fines
+                    if (existing.getStatus() == FineStatus.PAID) {
+                        log.info("Fine for loan {} is already paid — skipping recalculation", loan.getId());
+                        return;
+                    }
+
+                    BigDecimal oldAmount = existing.getAmount();
+                    BigDecimal delta = finalAmount.subtract(oldAmount); // how much the fine grew
+
                     existing.setAmount(finalAmount);
                     existing.setLastCalculatedAt(LocalDate.now());
                     existing.setCapped(finalCapped);
                     fineRepository.save(existing);
+
+                    // update member's unpaidFinesTotal by the delta
+                    if (delta.compareTo(BigDecimal.ZERO) != 0) {
+
+                        member.setUnpaidFinesTotal(member.getUnpaidFinesTotal().add(delta));
+                        memberRepository.save(member);
+                        log.info("Updated fine for loan {}: oldAmount={}, newAmount={}, delta={}",
+                                loan.getId(), oldAmount, finalAmount, delta);
+                    }
                 },
                 () -> {
+                    // fine doesn't exist — create new one (no change here)
                     Fine fine = new Fine();
                     fine.setLoan(loan);
                     fine.setAmount(finalAmount);
@@ -201,6 +220,7 @@ public class LoanServiceImpl implements LoanService {
 
                     member.setUnpaidFinesTotal(member.getUnpaidFinesTotal().add(finalAmount));
                     memberRepository.save(member);
+                    log.info("Created fine for loan {}: amount={}", loan.getId(), finalAmount);
                 }
         );
     }

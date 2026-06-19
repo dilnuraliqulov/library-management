@@ -32,7 +32,6 @@ public class ReservationServiceImpl implements ReservationService {
     private final MemberService memberService;
     private final BookService bookService;
     private final ReservationMapper reservationMapper;
-    private final ReservationProperties reservationProperties;
 
 
     @Override
@@ -82,13 +81,14 @@ public class ReservationServiceImpl implements ReservationService {
                     "Cannot cancel a reservation with status: " + reservation.getStatus());
         }
 
-        // if reservation was NOTIFIED, the notifiedBooks count needs to decrease
         if (reservation.getStatus() == ReservationStatus.NOTIFIED) {
             Book book = reservation.getBook();
             book.setNotifiedBooks(Math.max(0, book.getNotifiedBooks() - 1));
-            book.setAvailableCopies(book.getAvailableCopies() + 1);
             bookService.saveBook(book);
-            log.info("Notified reservation cancelled — copy returned to available pool for book {}",
+
+            bookService.increaseAvailableCopiesOrFulfillReservation(book.getId());
+
+            log.info("Notified reservation cancelled — next in queue notified or copy returned for book {}",
                     book.getId());
         }
 

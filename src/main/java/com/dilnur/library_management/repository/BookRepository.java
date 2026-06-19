@@ -4,6 +4,7 @@ import com.dilnur.library_management.entity.Book;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -32,5 +33,23 @@ public interface BookRepository extends JpaRepository<Book, UUID> {
         ORDER BY COUNT(l) DESC
         """)
     Page<Object[]> findMostBorrowedBooks(Pageable pageable);
+
+    @Modifying
+    @Query("""
+        UPDATE Book b
+           SET b.availableCopies = b.availableCopies - 1
+         WHERE b.id = :bookId
+           AND b.availableCopies > 0
+    """)
+    int decrementAvailableCopies(UUID bookId);
+
+    @Modifying
+    @Query("""
+    UPDATE Book b
+       SET b.availableCopies = b.availableCopies + 1
+     WHERE b.id = :bookId
+       AND b.availableCopies < b.totalCopies
+""")
+    int incrementAvailableCopies(UUID bookId);
 
 }

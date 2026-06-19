@@ -95,11 +95,6 @@ public class LoanServiceImpl implements LoanService {
             return loanMapper.toResponse(saved);
         }
 
-        // no NOTIFIED reservation — normal borrow flow
-        if (book.getAvailableCopies() <= 0) {
-            throw new BusinessRuleException("No available copies for book: " + book.getTitle());
-        }
-
         Loan loan = new Loan();
         loan.setMember(member);
         loan.setBook(book);

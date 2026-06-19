@@ -135,34 +135,24 @@ public class BookServiceImpl implements BookService {
     public void decreaseAvailableCopies(UUID id) {
         log.debug("Decreasing available copies for bookId={}", id);
 
-        Book book = bookRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Book not found with id: " + id));
+        int updatedRows = bookRepository.decrementAvailableCopies(id);
 
-        if (book.getAvailableCopies() <= 0) {
-            throw new BusinessRuleException("No available copies for book: " + book.getTitle());
+        if (updatedRows == 0) {
+            throw new BusinessRuleException(
+                    "No available copies for this book");
         }
-
-        book.setAvailableCopies(book.getAvailableCopies() - 1);
-        log.debug("Available copies decreased for bookId={}, remaining={}", id, book.getAvailableCopies());
-
-        bookRepository.save(book);
     }
 
     @Override
     public void increaseAvailableCopies(UUID id) {
         log.debug("Increasing available copies for bookId={}", id);
 
-        Book book = bookRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Book not found with id: " + id));
+        int updatedRows = bookRepository.incrementAvailableCopies(id);
 
-        if (book.getAvailableCopies() >= book.getTotalCopies()) {
-            throw new BusinessRuleException("Available copies cannot exceed total copies for book: " + book.getTitle());
+        if (updatedRows == 0) {
+            throw new BusinessRuleException(
+                    "Available copies cannot exceed total copies");
         }
-
-        book.setAvailableCopies(book.getAvailableCopies() + 1);
-        log.debug("Available copies increased for bookId={}, now={}", id, book.getAvailableCopies());
-
-        bookRepository.save(book);
     }
 
     @Override
@@ -178,29 +168,45 @@ public class BookServiceImpl implements BookService {
         log.debug("Processing copy return for bookId={}", bookId);
 
         Book book = bookRepository.findById(bookId)
-                .orElseThrow(() -> new EntityNotFoundException("Book not found with id: " + bookId));
+                .orElseThrow(() ->
+                        new EntityNotFoundException("Book not found with id: " + bookId));
 
         List<Reservation> queue = reservationRepository
-                .findByBookAndStatusOrderByReservedAtAsc(book, ReservationStatus.PENDING);
+                .findByBookAndStatusOrderByReservedAtAsc(
+                        book,
+                        ReservationStatus.PENDING
+                );
 
         if (queue.isEmpty()) {
-            // no reservation queue — just increase available copies normally
-            if (book.getAvailableCopies() >= book.getTotalCopies()) {
-                throw new BusinessRuleException("Available copies cannot exceed total copies for book: " + book.getTitle());
-            }
-            book.setAvailableCopies(book.getAvailableCopies() + 1);
-        } else {
-            // reservation queue exists — notify first member in queue
-            Reservation nextReservation = queue.get(0);
-            nextReservation.setStatus(ReservationStatus.NOTIFIED);
-            nextReservation.setExpiresAt(LocalDate.now().plusDays(reservationProperties.getNotificationExpiryDays()));
-            reservationRepository.save(nextReservation);
 
-            // increase notifiedBooks instead of availableCopies
-            book.setNotifiedBooks(book.getNotifiedBooks() + 1);
+            int updatedRows = bookRepository.incrementAvailableCopies(bookId);
+
+            if (updatedRows == 0) {
+                throw new BusinessRuleException(
+                        "Available copies cannot exceed total copies for book: "
+                                + book.getTitle());
+            }
+
+            return;
         }
 
+        Reservation nextReservation = queue.get(0);
+        nextReservation.setStatus(ReservationStatus.NOTIFIED);
+        nextReservation.setExpiresAt(
+                LocalDate.now()
+                        .plusDays(reservationProperties.getNotificationExpiryDays())
+        );
+
+        reservationRepository.save(nextReservation);
+
+        book.setNotifiedBooks(book.getNotifiedBooks() + 1);
         bookRepository.save(book);
+
+        log.info(
+                "Reservation {} notified for book {}",
+                nextReservation.getId(),
+                bookId
+        );
     }
 
     @Override

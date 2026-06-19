@@ -146,9 +146,31 @@ public class BookServiceImpl implements BookService {
 
         Book book = bookRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Book not found with id: " + id));
+
+        boolean hasActiveLoans = loanRepository.existsByBookAndStatusIn(
+                book,
+                List.of(LoanStatus.ACTIVE, LoanStatus.OVERDUE)
+        );
+        if (hasActiveLoans) {
+            throw new BusinessRuleException(
+                    "Cannot delete book with id=" + id +
+                            ": book has active or overdue loans"
+            );
+        }
+
+        boolean hasPendingReservations = reservationRepository.existsByBookAndStatusIn(
+                book,
+                List.of(ReservationStatus.PENDING, ReservationStatus.NOTIFIED)
+        );
+        if (hasPendingReservations) {
+            throw new BusinessRuleException(
+                    "Cannot delete book with id=" + id +
+                            ": book has active reservations"
+            );
+        }
+
         bookRepository.delete(book);
         log.info("Book deleted successfully with id={}", id);
-
     }
 
     @Override

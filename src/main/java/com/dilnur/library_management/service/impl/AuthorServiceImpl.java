@@ -3,8 +3,10 @@ package com.dilnur.library_management.service.impl;
 import com.dilnur.library_management.dto.request.AuthorRequest;
 import com.dilnur.library_management.dto.response.AuthorResponse;
 import com.dilnur.library_management.entity.Author;
+import com.dilnur.library_management.exception.BusinessRuleException;
 import com.dilnur.library_management.mapper.AuthorMapper;
 import com.dilnur.library_management.repository.AuthorRepository;
+import com.dilnur.library_management.repository.BookRepository;
 import com.dilnur.library_management.service.AuthorService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,7 @@ public class AuthorServiceImpl implements AuthorService {
 
     private final AuthorMapper authorMapper;
     private final AuthorRepository authorRepository;
+    private final BookRepository bookRepository;
 
 
     @Override
@@ -81,9 +84,16 @@ public class AuthorServiceImpl implements AuthorService {
         Author author = authorRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Author not found with id: " + id));
 
+        boolean hasBooks = bookRepository.existsByAuthorsContaining(author);
+        if (hasBooks) {
+            throw new BusinessRuleException(
+                    "Cannot delete author with id=" + id +
+                            ": author is linked to one or more books. " +
+                            "Remove the author from all books first."
+            );
+        }
+
         authorRepository.delete(author);
-
         log.info("Author deleted successfully with id={}", id);
-
     }
 }

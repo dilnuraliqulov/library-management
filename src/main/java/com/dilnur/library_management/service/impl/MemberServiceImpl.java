@@ -3,8 +3,13 @@ package com.dilnur.library_management.service.impl;
 import com.dilnur.library_management.dto.request.MemberRequest;
 import com.dilnur.library_management.dto.response.MemberResponse;
 import com.dilnur.library_management.entity.Member;
+import com.dilnur.library_management.entity.enums.LoanStatus;
+import com.dilnur.library_management.entity.enums.ReservationStatus;
+import com.dilnur.library_management.exception.BusinessRuleException;
 import com.dilnur.library_management.mapper.MemberMapper;
+import com.dilnur.library_management.repository.LoanRepository;
 import com.dilnur.library_management.repository.MemberRepository;
+import com.dilnur.library_management.repository.ReservationRepository;
 import com.dilnur.library_management.service.MemberService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +19,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -24,6 +30,8 @@ public class MemberServiceImpl implements MemberService {
 
     private final MemberRepository memberRepository;
     private final MemberMapper memberMapper;
+    private final LoanRepository loanRepository;
+    private final ReservationRepository reservationRepository;
 
     @Override
     public MemberResponse createMember(MemberRequest memberRequest) {
@@ -63,14 +71,33 @@ public class MemberServiceImpl implements MemberService {
     public void deleteMember(UUID memberId) {
         log.info("Deleting member with id={}", memberId);
 
-
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new EntityNotFoundException("Member not found with id: " + memberId));
 
-        log.info("Member deleted successfully with id={}", memberId);
+        boolean hasActiveLoans = loanRepository.existsByMemberAndStatusIn(
+                member,
+                List.of(LoanStatus.ACTIVE, LoanStatus.OVERDUE)
+        );
+        if (hasActiveLoans) {
+            throw new BusinessRuleException(
+                    "Cannot delete member with id=" + memberId +
+                            ": member has active or overdue loans"
+            );
+        }
+
+        boolean hasPendingReservations = reservationRepository.existsByMemberAndStatusIn(
+                member,
+                List.of(ReservationStatus.PENDING, ReservationStatus.NOTIFIED)
+        );
+        if (hasPendingReservations) {
+            throw new BusinessRuleException(
+                    "Cannot delete member with id=" + memberId +
+                            ": member has active reservations"
+            );
+        }
 
         memberRepository.delete(member);
-
+        log.info("Member deleted successfully with id={}", memberId);
     }
 
     @Override

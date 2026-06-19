@@ -152,11 +152,13 @@ public class LoanServiceImpl implements LoanService {
             throw new BusinessRuleException("Maximum number of extensions reached for this loan");
         }
 
-        boolean hasPendingReservation = reservationRepository
-                .existsByBookAndStatus(loan.getBook(), ReservationStatus.PENDING);
+        boolean hasActiveReservation = reservationRepository
+                .existsByBookAndStatusIn(loan.getBook(),
+                        List.of(ReservationStatus.PENDING, ReservationStatus.NOTIFIED));
 
-        if (hasPendingReservation) {
-            throw new BusinessRuleException("Cannot extend — another member is waiting for this book");
+        if (hasActiveReservation) {
+            throw new BusinessRuleException(
+                    "Cannot extend — another member is waiting for this book");
         }
 
         loan.setDueDate(loan.getDueDate().plusDays(loanProperties.getExtensionDays()));

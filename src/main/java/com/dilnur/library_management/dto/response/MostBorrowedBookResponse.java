@@ -8,5 +8,5 @@ public record MostBorrowedBookResponse(
         String isbn,
         int totalCopies,
         int availableCopies,
-        int borrowedCopies  // totalCopies - availableCopies
+        long totalLoans
 ) {}

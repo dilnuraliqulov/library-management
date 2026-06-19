@@ -3,6 +3,7 @@ package com.dilnur.library_management.service.impl;
 import com.dilnur.library_management.dto.response.FineStatisticsResponse;
 import com.dilnur.library_management.dto.response.MostBorrowedBookResponse;
 import com.dilnur.library_management.dto.response.OverdueMemberResponse;
+import com.dilnur.library_management.entity.Book;
 import com.dilnur.library_management.entity.Member;
 import com.dilnur.library_management.entity.enums.FineStatus;
 import com.dilnur.library_management.entity.enums.MemberType;
@@ -35,18 +36,19 @@ public class ReportServiceImpl implements ReportService {
 
     @Override
     public Page<MostBorrowedBookResponse> getMostBorrowedBooks(Pageable pageable) {
-        log.debug("Fetching most borrowed books: page={}, size={}", pageable.getPageNumber(), pageable.getPageSize());
-
         return bookRepository.findMostBorrowedBooks(pageable)
-                .map(book -> new MostBorrowedBookResponse(
-                        book.getId(),
-                        book.getTitle(),
-                        book.getIsbn(),
-                        book.getTotalCopies(),
-                        book.getAvailableCopies(),
-                        book.getTotalCopies() - book.getAvailableCopies() - book.getNotifiedBooks()
-                ));
-
+                .map(row -> {
+                    Book book = (Book) row[0];
+                    long totalLoans = (long) row[1];
+                    return new MostBorrowedBookResponse(
+                            book.getId(),
+                            book.getTitle(),
+                            book.getIsbn(),
+                            book.getTotalCopies(),
+                            book.getAvailableCopies(),
+                            totalLoans
+                    );
+                });
     }
 
 

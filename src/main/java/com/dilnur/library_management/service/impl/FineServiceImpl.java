@@ -1,6 +1,7 @@
 package com.dilnur.library_management.service.impl;
 
 import com.dilnur.library_management.config.FineProperties;
+import com.dilnur.library_management.config.LoanProperties;
 import com.dilnur.library_management.dto.response.FineResponse;
 import com.dilnur.library_management.entity.Book;
 import com.dilnur.library_management.entity.Fine;
@@ -39,6 +40,7 @@ public class FineServiceImpl implements FineService {
     private final MemberRepository memberRepository;
     private final FineMapper fineMapper;
     private final FineProperties fineProperties;
+    private final LoanProperties loanProperties;
 
 
     @Override
@@ -59,10 +61,10 @@ public class FineServiceImpl implements FineService {
 
         // if member was BLOCKED due to fines, unblock them if no more unpaid fines
         if (member.getStatus() == MemberStatus.BLOCKED
-                && member.getUnpaidFinesTotal().compareTo(BigDecimal.ZERO) <= 0) {
+                && member.getUnpaidFinesTotal().compareTo(loanProperties.getMaxUnpaidThreshold()) < 0) {
             member.setStatus(MemberStatus.ACTIVE);
-            member.setUnpaidFinesTotal(BigDecimal.ZERO); // prevent negative
-            log.info("Member {} unblocked after paying all fines", member.getId());
+            log.info("Member {} unblocked — unpaidFinesTotal={} is below threshold={}",
+                    member.getId(), member.getUnpaidFinesTotal(), loanProperties.getMaxUnpaidThreshold());
         }
 
         memberRepository.save(member);
@@ -128,31 +130,29 @@ public class FineServiceImpl implements FineService {
 
         fineRepository.findByLoan(loan).ifPresentOrElse(
                 existing -> {
-                    // only update if fine is still UNPAID — don't touch PAID fines
                     if (existing.getStatus() == FineStatus.PAID) {
                         log.info("Fine for loan {} is already paid — skipping recalculation", loan.getId());
                         return;
                     }
 
                     BigDecimal oldAmount = existing.getAmount();
-                    BigDecimal delta = finalAmount.subtract(oldAmount); // how much the fine grew
+                    BigDecimal delta = finalAmount.subtract(oldAmount);
 
                     existing.setAmount(finalAmount);
                     existing.setLastCalculatedAt(LocalDate.now());
                     existing.setCapped(finalCapped);
                     fineRepository.save(existing);
 
-                    // update member's unpaidFinesTotal by the delta
                     if (delta.compareTo(BigDecimal.ZERO) != 0) {
-
                         member.setUnpaidFinesTotal(member.getUnpaidFinesTotal().add(delta));
+                        blockMemberIfThresholdExceeded(member); // ← single call
                         memberRepository.save(member);
                         log.info("Updated fine for loan {}: oldAmount={}, newAmount={}, delta={}",
                                 loan.getId(), oldAmount, finalAmount, delta);
                     }
                 },
                 () -> {
-                    // fine doesn't exist — create new one (no change here)
+                    // fine doesn't exist — create new one
                     Fine fine = new Fine();
                     fine.setLoan(loan);
                     fine.setAmount(finalAmount);
@@ -162,8 +162,10 @@ public class FineServiceImpl implements FineService {
                     fineRepository.save(fine);
 
                     member.setUnpaidFinesTotal(member.getUnpaidFinesTotal().add(finalAmount));
+                    blockMemberIfThresholdExceeded(member); // ← single call
                     memberRepository.save(member);
                     log.info("Created fine for loan {}: amount={}", loan.getId(), finalAmount);
+
                 }
         );
     }
@@ -189,5 +191,13 @@ public class FineServiceImpl implements FineService {
     public Page<FineResponse> getFinesByMember(UUID memberId, Pageable pageable) {
         return fineRepository.findByLoanMemberId(memberId, pageable)
                 .map(fineMapper::toResponse);
+    }
+    private void blockMemberIfThresholdExceeded(Member member) {
+        if (member.getStatus() == MemberStatus.ACTIVE
+                && member.getUnpaidFinesTotal().compareTo(loanProperties.getMaxUnpaidThreshold()) >= 0) {
+            member.setStatus(MemberStatus.BLOCKED);
+            log.info("Member {} automatically blocked — unpaidFinesTotal={} exceeds threshold={}",
+                    member.getId(), member.getUnpaidFinesTotal(), loanProperties.getMaxUnpaidThreshold());
+        }
     }
 }

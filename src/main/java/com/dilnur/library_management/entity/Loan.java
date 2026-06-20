@@ -28,7 +28,6 @@ public class Loan {
     @JoinColumn(name = "book_id", nullable = false)
     private Book book;
 
-
     @Column(nullable = false,updatable = false)
     private LocalDate loanedAt = LocalDate.now();
 
@@ -37,7 +36,6 @@ public class Loan {
 
     @Column(nullable = false)
     private LocalDate dueDate;
-
 
     private LocalDate returnedAt;
 

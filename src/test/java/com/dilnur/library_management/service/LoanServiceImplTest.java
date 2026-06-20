@@ -10,13 +10,12 @@ import com.dilnur.library_management.entity.enums.LoanStatus;
 import com.dilnur.library_management.entity.enums.MemberStatus;
 import com.dilnur.library_management.entity.enums.MemberType;
 import com.dilnur.library_management.entity.enums.ReservationStatus;
+import com.dilnur.library_management.exception.BusinessRuleException;
 import com.dilnur.library_management.mapper.LoanMapper;
 import com.dilnur.library_management.repository.FineRepository;
 import com.dilnur.library_management.repository.LoanRepository;
 import com.dilnur.library_management.repository.MemberRepository;
 import com.dilnur.library_management.repository.ReservationRepository;
-import com.dilnur.library_management.service.BookService;
-import com.dilnur.library_management.service.MemberService;
 import com.dilnur.library_management.service.impl.LoanServiceImpl;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,10 +54,10 @@ class LoanServiceImplTest {
     @Mock LoanMapper loanMapper;
     @Mock LoanProperties loanProperties;
     @Mock FineProperties fineProperties;
+    @Mock FineService fineService;
 
     @InjectMocks
     LoanServiceImpl loanService;
-
 
     private Member activeMember;
     private Member blockedMember;
@@ -86,11 +85,15 @@ class LoanServiceImplTest {
         book.setTitle("Clean Code");
         book.setAvailableCopies(3);
         book.setTotalCopies(5);
+        book.setNotifiedBooks(0);
         book.setPrice(new BigDecimal("25.00"));
 
         loanRequest = new LoanRequest(activeMember.getId(), book.getId());
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // issueBook()
+    // ─────────────────────────────────────────────────────────────────────────
 
     @Nested
     @DisplayName("issueBook()")
@@ -105,6 +108,9 @@ class LoanServiceImplTest {
             given(loanProperties.getMaxBooksPerMember()).willReturn(5);
             given(loanProperties.getMaxUnpaidThreshold()).willReturn(new BigDecimal("20.00"));
             given(loanProperties.getPeriodDays()).willReturn(14);
+            given(reservationRepository.findByMemberAndBookAndStatus(
+                    activeMember, book, ReservationStatus.NOTIFIED))
+                    .willReturn(Optional.empty());
 
             Loan savedLoan = new Loan();
             savedLoan.setId(UUID.randomUUID());
@@ -125,35 +131,36 @@ class LoanServiceImplTest {
         }
 
         @Test
-        @DisplayName("throws when member is BLOCKED")
+        @DisplayName("throws BusinessRuleException when member is BLOCKED")
         void issueBook_blockedMember_throws() {
             given(memberService.getMemberEntityById(blockedMember.getId())).willReturn(blockedMember);
 
             LoanRequest request = new LoanRequest(blockedMember.getId(), book.getId());
 
+            // service throws BusinessRuleException, not IllegalStateException
             assertThatThrownBy(() -> loanService.issueBook(request))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isInstanceOf(BusinessRuleException.class)
                     .hasMessageContaining("blocked");
 
             verifyNoInteractions(bookService, loanRepository);
         }
 
         @Test
-        @DisplayName("throws when member has reached the active loan limit")
+        @DisplayName("throws BusinessRuleException when member has reached the active loan limit")
         void issueBook_loanLimitReached_throws() {
             given(memberService.getMemberEntityById(activeMember.getId())).willReturn(activeMember);
             given(loanProperties.getMaxBooksPerMember()).willReturn(3);
             given(loanRepository.countByMemberAndStatusIn(eq(activeMember), any())).willReturn(3);
 
             assertThatThrownBy(() -> loanService.issueBook(loanRequest))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isInstanceOf(BusinessRuleException.class)
                     .hasMessageContaining("maximum number of borrowed books");
 
             verifyNoInteractions(bookService);
         }
 
         @Test
-        @DisplayName("throws when member has unpaid fines exceeding the threshold")
+        @DisplayName("throws BusinessRuleException when member has unpaid fines exceeding the threshold")
         void issueBook_unpaidFinesExceedThreshold_throws() {
             activeMember.setUnpaidFinesTotal(new BigDecimal("25.00"));
 
@@ -163,14 +170,14 @@ class LoanServiceImplTest {
             given(loanRepository.countByMemberAndStatusIn(eq(activeMember), any())).willReturn(0);
 
             assertThatThrownBy(() -> loanService.issueBook(loanRequest))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isInstanceOf(BusinessRuleException.class)
                     .hasMessageContaining("unpaid fines");
 
             verifyNoInteractions(bookService);
         }
 
         @Test
-        @DisplayName("throws when book has no available copies")
+        @DisplayName("throws BusinessRuleException when book has no available copies (no reservation)")
         void issueBook_noAvailableCopies_throws() {
             book.setAvailableCopies(0);
 
@@ -179,12 +186,17 @@ class LoanServiceImplTest {
             given(loanProperties.getMaxUnpaidThreshold()).willReturn(new BigDecimal("20.00"));
             given(loanRepository.countByMemberAndStatusIn(eq(activeMember), any())).willReturn(0);
             given(bookService.getBookEntityById(book.getId())).willReturn(book);
+            given(reservationRepository.findByMemberAndBookAndStatus(
+                    activeMember, book, ReservationStatus.NOTIFIED))
+                    .willReturn(Optional.empty());
+
+            // decreaseAvailableCopies throws BusinessRuleException when no copies available
+            doThrow(new BusinessRuleException("No available copies for this book"))
+                    .when(bookService).decreaseAvailableCopies(book.getId());
 
             assertThatThrownBy(() -> loanService.issueBook(loanRequest))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isInstanceOf(BusinessRuleException.class)
                     .hasMessageContaining("No available copies");
-
-            verify(bookService, never()).decreaseAvailableCopies(any());
         }
 
         @Test
@@ -196,6 +208,9 @@ class LoanServiceImplTest {
             given(loanProperties.getMaxBooksPerMember()).willReturn(5);
             given(loanProperties.getMaxUnpaidThreshold()).willReturn(new BigDecimal("20.00"));
             given(loanProperties.getPeriodDays()).willReturn(21);
+            given(reservationRepository.findByMemberAndBookAndStatus(
+                    activeMember, book, ReservationStatus.NOTIFIED))
+                    .willReturn(Optional.empty());
 
             Loan savedLoan = new Loan();
             given(loanRepository.save(any(Loan.class))).willReturn(savedLoan);
@@ -207,15 +222,52 @@ class LoanServiceImplTest {
             verify(loanRepository).save(captor.capture());
             assertThat(captor.getValue().getDueDate()).isEqualTo(LocalDate.now().plusDays(21));
         }
+
+        @Test
+        @DisplayName("fulfills NOTIFIED reservation instead of decrementing available copies")
+        void issueBook_withNotifiedReservation_fulfillsReservation() {
+            Reservation reservation = new Reservation();
+            reservation.setId(UUID.randomUUID());
+            reservation.setMember(activeMember);
+            reservation.setBook(book);
+            reservation.setStatus(ReservationStatus.NOTIFIED);
+            book.setNotifiedBooks(1);
+            book.setAvailableCopies(0); // copy is held, not in available pool
+
+            given(memberService.getMemberEntityById(activeMember.getId())).willReturn(activeMember);
+            given(loanRepository.countByMemberAndStatusIn(eq(activeMember), any())).willReturn(0);
+            given(bookService.getBookEntityById(book.getId())).willReturn(book);
+            given(loanProperties.getMaxBooksPerMember()).willReturn(5);
+            given(loanProperties.getMaxUnpaidThreshold()).willReturn(new BigDecimal("20.00"));
+            given(loanProperties.getPeriodDays()).willReturn(14);
+            given(reservationRepository.findByMemberAndBookAndStatus(
+                    activeMember, book, ReservationStatus.NOTIFIED))
+                    .willReturn(Optional.of(reservation));
+
+            Loan savedLoan = new Loan();
+            given(loanRepository.save(any(Loan.class))).willReturn(savedLoan);
+            given(loanMapper.toResponse(savedLoan)).willReturn(mock(LoanResponse.class));
+
+            loanService.issueBook(loanRequest);
+
+            // reservation must be FULFILLED, not availableCopies decremented
+            assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.FULFILLED);
+            assertThat(book.getNotifiedBooks()).isEqualTo(0);
+            verify(bookService, never()).decreaseAvailableCopies(any());
+            verify(reservationRepository).save(reservation);
+        }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // returnBook()
+    // ─────────────────────────────────────────────────────────────────────────
 
     @Nested
     @DisplayName("returnBook()")
     class ReturnBook {
 
         @Test
-        @DisplayName("successfully returns book and closes the loan")
+        @DisplayName("successfully returns book and closes the loan with no fine")
         void returnBook_success_noFine() {
             Loan loan = activeLoan(LocalDate.now().plusDays(5)); // not overdue
 
@@ -231,7 +283,8 @@ class LoanServiceImplTest {
             assertThat(loan.getStatus()).isEqualTo(LoanStatus.RETURNED);
             assertThat(loan.getReturnedAt()).isEqualTo(LocalDate.now());
             verify(bookService).increaseAvailableCopiesOrFulfillReservation(book.getId());
-            verify(fineRepository, never()).save(any());
+            // returnedAt is NOT after dueDate → fineService must NOT be called
+            verify(fineService, never()).calculateAndSaveFine(any());
         }
 
         @Test
@@ -246,27 +299,16 @@ class LoanServiceImplTest {
             given(loanRepository.save(loan)).willReturn(loan);
             given(loanMapper.toResponse(loan)).willReturn(mock(LoanResponse.class));
 
-            FineProperties.RateConfig rateConfig = new FineProperties.RateConfig();
-            rateConfig.setDailyRate(new BigDecimal("1.50"));
-            rateConfig.setGraceDays(0);
-            given(fineProperties.getRates()).willReturn(Map.of(MemberType.STANDARD, rateConfig));
-            given(fineProperties.isMaxFineCapEnabled()).willReturn(false);
-            given(fineRepository.findByLoan(loan)).willReturn(Optional.empty());
-
             loanService.returnBook(activeMember.getId(), book.getId());
 
-            ArgumentCaptor<Fine> fineCaptor = ArgumentCaptor.forClass(Fine.class);
-            verify(fineRepository).save(fineCaptor.capture());
-            Fine savedFine = fineCaptor.getValue();
-            assertThat(savedFine.getAmount()).isEqualByComparingTo(new BigDecimal("7.50")); // 5 days × 1.50
-            assertThat(savedFine.getStatus()).isEqualTo(FineStatus.UNPAID);
+            // returnedAt IS after dueDate → fineService.calculateAndSaveFine must be called
+            verify(fineService).calculateAndSaveFine(loan);
         }
 
         @Test
-        @DisplayName("fine is capped at book price when cap is enabled and amount exceeds price")
-        void returnBook_overdue_fineIsCappedAtBookPrice() {
-            Loan loan = activeLoan(LocalDate.now().minusDays(30)); // heavily overdue
-            book.setPrice(new BigDecimal("10.00"));
+        @DisplayName("does not calculate fine when returned exactly on due date")
+        void returnBook_returnedOnDueDate_noFine() {
+            Loan loan = activeLoan(LocalDate.now()); // due today
 
             given(memberService.getMemberEntityById(activeMember.getId())).willReturn(activeMember);
             given(bookService.getBookEntityById(book.getId())).willReturn(book);
@@ -275,74 +317,14 @@ class LoanServiceImplTest {
             given(loanRepository.save(loan)).willReturn(loan);
             given(loanMapper.toResponse(loan)).willReturn(mock(LoanResponse.class));
 
-            FineProperties.RateConfig rateConfig = new FineProperties.RateConfig();
-            rateConfig.setDailyRate(new BigDecimal("2.00")); // 30 days × 2.00 = 60.00 > 10.00
-            rateConfig.setGraceDays(0);
-            given(fineProperties.getRates()).willReturn(Map.of(MemberType.STANDARD, rateConfig));
-            given(fineProperties.isMaxFineCapEnabled()).willReturn(true);
-            given(fineRepository.findByLoan(loan)).willReturn(Optional.empty());
-
             loanService.returnBook(activeMember.getId(), book.getId());
 
-            ArgumentCaptor<Fine> fineCaptor = ArgumentCaptor.forClass(Fine.class);
-            verify(fineRepository).save(fineCaptor.capture());
-            assertThat(fineCaptor.getValue().getAmount()).isEqualByComparingTo(new BigDecimal("10.00"));
-            assertThat(fineCaptor.getValue().isCapped()).isTrue();
+            // returnedAt == dueDate → isAfter is false → no fine
+            verify(fineService, never()).calculateAndSaveFine(any());
         }
 
         @Test
-        @DisplayName("fine is not applied when within grace period")
-        void returnBook_overdue_withinGracePeriod_noFine() {
-            Loan loan = activeLoan(LocalDate.now().minusDays(2)); // 2 days overdue
-
-            given(memberService.getMemberEntityById(activeMember.getId())).willReturn(activeMember);
-            given(bookService.getBookEntityById(book.getId())).willReturn(book);
-            given(loanRepository.findByMemberAndBookAndStatusIn(eq(activeMember), eq(book), any()))
-                    .willReturn(Optional.of(loan));
-            given(loanRepository.save(loan)).willReturn(loan);
-            given(loanMapper.toResponse(loan)).willReturn(mock(LoanResponse.class));
-
-            FineProperties.RateConfig rateConfig = new FineProperties.RateConfig();
-            rateConfig.setDailyRate(new BigDecimal("1.50"));
-            rateConfig.setGraceDays(3); // grace period covers the 2-day delay
-            given(fineProperties.getRates()).willReturn(Map.of(MemberType.STANDARD, rateConfig));
-
-            loanService.returnBook(activeMember.getId(), book.getId());
-
-            verify(fineRepository, never()).save(any());
-        }
-
-        @Test
-        @DisplayName("updates existing fine instead of creating duplicate (idempotent)")
-        void returnBook_overdue_updatesExistingFine() {
-            Loan loan = activeLoan(LocalDate.now().minusDays(3));
-
-            Fine existingFine = new Fine();
-            existingFine.setAmount(new BigDecimal("3.00"));
-            existingFine.setStatus(FineStatus.UNPAID);
-
-            given(memberService.getMemberEntityById(activeMember.getId())).willReturn(activeMember);
-            given(bookService.getBookEntityById(book.getId())).willReturn(book);
-            given(loanRepository.findByMemberAndBookAndStatusIn(eq(activeMember), eq(book), any()))
-                    .willReturn(Optional.of(loan));
-            given(loanRepository.save(loan)).willReturn(loan);
-            given(loanMapper.toResponse(loan)).willReturn(mock(LoanResponse.class));
-
-            FineProperties.RateConfig rateConfig = new FineProperties.RateConfig();
-            rateConfig.setDailyRate(new BigDecimal("1.50"));
-            rateConfig.setGraceDays(0);
-            given(fineProperties.getRates()).willReturn(Map.of(MemberType.STANDARD, rateConfig));
-            given(fineProperties.isMaxFineCapEnabled()).willReturn(false);
-            given(fineRepository.findByLoan(loan)).willReturn(Optional.of(existingFine));
-
-            loanService.returnBook(activeMember.getId(), book.getId());
-
-            verify(fineRepository, times(1)).save(existingFine);
-            assertThat(existingFine.getAmount()).isEqualByComparingTo(new BigDecimal("4.50")); // 3 days × 1.50
-        }
-
-        @Test
-        @DisplayName("throws when no active loan found for member and book")
+        @DisplayName("throws EntityNotFoundException when no active loan found")
         void returnBook_noActiveLoan_throws() {
             given(memberService.getMemberEntityById(activeMember.getId())).willReturn(activeMember);
             given(bookService.getBookEntityById(book.getId())).willReturn(book);
@@ -353,8 +335,28 @@ class LoanServiceImplTest {
                     .isInstanceOf(EntityNotFoundException.class)
                     .hasMessageContaining("Active loan not found");
         }
+
+        @Test
+        @DisplayName("always calls increaseAvailableCopiesOrFulfillReservation after return, even when overdue")
+        void returnBook_overdue_alwaysReleasesBookCopy() {
+            Loan loan = activeLoan(LocalDate.now().minusDays(3));
+
+            given(memberService.getMemberEntityById(activeMember.getId())).willReturn(activeMember);
+            given(bookService.getBookEntityById(book.getId())).willReturn(book);
+            given(loanRepository.findByMemberAndBookAndStatusIn(eq(activeMember), eq(book), any()))
+                    .willReturn(Optional.of(loan));
+            given(loanRepository.save(loan)).willReturn(loan);
+            given(loanMapper.toResponse(loan)).willReturn(mock(LoanResponse.class));
+
+            loanService.returnBook(activeMember.getId(), book.getId());
+
+            verify(bookService).increaseAvailableCopiesOrFulfillReservation(book.getId());
+        }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // extendDueDate()
+    // ─────────────────────────────────────────────────────────────────────────
 
     @Nested
     @DisplayName("extendDueDate()")
@@ -371,18 +373,21 @@ class LoanServiceImplTest {
             given(loanRepository.findById(loanId)).willReturn(Optional.of(loan));
             given(loanProperties.getMaxExtensions()).willReturn(2);
             given(loanProperties.getExtensionDays()).willReturn(7);
-            given(reservationRepository.existsByBookAndStatus(book, ReservationStatus.PENDING)).willReturn(false);
+            // correct method: existsByBookAndStatusIn with a list
+            given(reservationRepository.existsByBookAndStatusIn(
+                    book, List.of(ReservationStatus.PENDING, ReservationStatus.NOTIFIED)))
+                    .willReturn(false);
             given(loanRepository.save(loan)).willReturn(loan);
             given(loanMapper.toResponse(loan)).willReturn(mock(LoanResponse.class));
 
             loanService.extendDueDate(loanId);
 
-            assertThat(loan.getDueDate()).isEqualTo(LocalDate.now().plusDays(14));
+            assertThat(loan.getDueDate()).isEqualTo(LocalDate.now().plusDays(14)); // 7 + 7
             assertThat(loan.getExtensionCount()).isEqualTo(1);
         }
 
         @Test
-        @DisplayName("throws when loan status is not ACTIVE")
+        @DisplayName("throws BusinessRuleException when loan status is not ACTIVE")
         void extendDueDate_notActive_throws() {
             UUID loanId = UUID.randomUUID();
             Loan loan = activeLoan(LocalDate.now().plusDays(7));
@@ -392,12 +397,12 @@ class LoanServiceImplTest {
             given(loanRepository.findById(loanId)).willReturn(Optional.of(loan));
 
             assertThatThrownBy(() -> loanService.extendDueDate(loanId))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isInstanceOf(BusinessRuleException.class)
                     .hasMessageContaining("Only active loans");
         }
 
         @Test
-        @DisplayName("throws when loan is already overdue")
+        @DisplayName("throws BusinessRuleException when loan is already overdue")
         void extendDueDate_alreadyOverdue_throws() {
             UUID loanId = UUID.randomUUID();
             Loan loan = activeLoan(LocalDate.now().minusDays(1)); // past due
@@ -406,12 +411,12 @@ class LoanServiceImplTest {
             given(loanRepository.findById(loanId)).willReturn(Optional.of(loan));
 
             assertThatThrownBy(() -> loanService.extendDueDate(loanId))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isInstanceOf(BusinessRuleException.class)
                     .hasMessageContaining("overdue");
         }
 
         @Test
-        @DisplayName("throws when max extension count has been reached")
+        @DisplayName("throws BusinessRuleException when max extension count has been reached")
         void extendDueDate_maxExtensionsReached_throws() {
             UUID loanId = UUID.randomUUID();
             Loan loan = activeLoan(LocalDate.now().plusDays(5));
@@ -422,13 +427,13 @@ class LoanServiceImplTest {
             given(loanProperties.getMaxExtensions()).willReturn(2);
 
             assertThatThrownBy(() -> loanService.extendDueDate(loanId))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isInstanceOf(BusinessRuleException.class)
                     .hasMessageContaining("Maximum number of extensions");
         }
 
         @Test
-        @DisplayName("throws when another member has a pending reservation for the book")
-        void extendDueDate_pendingReservationExists_throws() {
+        @DisplayName("throws BusinessRuleException when another member has a pending or notified reservation")
+        void extendDueDate_pendingOrNotifiedReservationExists_throws() {
             UUID loanId = UUID.randomUUID();
             Loan loan = activeLoan(LocalDate.now().plusDays(5));
             loan.setId(loanId);
@@ -436,15 +441,18 @@ class LoanServiceImplTest {
 
             given(loanRepository.findById(loanId)).willReturn(Optional.of(loan));
             given(loanProperties.getMaxExtensions()).willReturn(2);
-            given(reservationRepository.existsByBookAndStatus(book, ReservationStatus.PENDING)).willReturn(true);
+            // correct method: existsByBookAndStatusIn
+            given(reservationRepository.existsByBookAndStatusIn(
+                    book, List.of(ReservationStatus.PENDING, ReservationStatus.NOTIFIED)))
+                    .willReturn(true);
 
             assertThatThrownBy(() -> loanService.extendDueDate(loanId))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isInstanceOf(BusinessRuleException.class)
                     .hasMessageContaining("another member is waiting");
         }
 
         @Test
-        @DisplayName("throws when loan is not found")
+        @DisplayName("throws EntityNotFoundException when loan is not found")
         void extendDueDate_loanNotFound_throws() {
             UUID loanId = UUID.randomUUID();
             given(loanRepository.findById(loanId)).willReturn(Optional.empty());
@@ -453,8 +461,36 @@ class LoanServiceImplTest {
                     .isInstanceOf(EntityNotFoundException.class)
                     .hasMessageContaining("Loan not found");
         }
+
+        @Test
+        @DisplayName("originalDueDate is never changed during extension")
+        void extendDueDate_originalDueDateUnchanged() {
+            UUID loanId = UUID.randomUUID();
+            LocalDate original = LocalDate.now().plusDays(7);
+            Loan loan = activeLoan(original);
+            loan.setId(loanId);
+            loan.setOriginalDueDate(original);
+            loan.setExtensionCount(0);
+
+            given(loanRepository.findById(loanId)).willReturn(Optional.of(loan));
+            given(loanProperties.getMaxExtensions()).willReturn(2);
+            given(loanProperties.getExtensionDays()).willReturn(7);
+            given(reservationRepository.existsByBookAndStatusIn(
+                    book, List.of(ReservationStatus.PENDING, ReservationStatus.NOTIFIED)))
+                    .willReturn(false);
+            given(loanRepository.save(loan)).willReturn(loan);
+            given(loanMapper.toResponse(loan)).willReturn(mock(LoanResponse.class));
+
+            loanService.extendDueDate(loanId);
+
+            assertThat(loan.getOriginalDueDate()).isEqualTo(original); // must not change
+            assertThat(loan.getDueDate()).isEqualTo(original.plusDays(7));
+        }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Helper
+    // ─────────────────────────────────────────────────────────────────────────
 
     private Loan activeLoan(LocalDate dueDate) {
         Loan loan = new Loan();
@@ -462,6 +498,7 @@ class LoanServiceImplTest {
         loan.setMember(activeMember);
         loan.setBook(book);
         loan.setDueDate(dueDate);
+        loan.setOriginalDueDate(dueDate);
         loan.setStatus(LoanStatus.ACTIVE);
         loan.setExtensionCount(0);
         return loan;

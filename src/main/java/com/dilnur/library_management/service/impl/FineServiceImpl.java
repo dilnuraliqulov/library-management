@@ -83,6 +83,7 @@ public class FineServiceImpl implements FineService {
     public void updateOverdueFines() {
         log.info("Running daily fine update job");
 
+        // existing fine update logic...
         List<Loan> overdueLoans = loanRepository
                 .findByStatusInAndDueDateBeforeAndReturnedAtIsNull(
                         List.of(LoanStatus.ACTIVE, LoanStatus.OVERDUE), LocalDate.now());
@@ -95,6 +96,9 @@ public class FineServiceImpl implements FineService {
             calculateAndSaveFine(loan);
         }
 
+        expireNotifiedReservations();
+
+        // expire NOTIFIED reservations that member didn't claim in time
         expireNotifiedReservations();
 
         log.info("Daily fine update job completed");
@@ -201,6 +205,7 @@ public class FineServiceImpl implements FineService {
                     blockMemberIfThresholdExceeded(member);
                     memberRepository.save(member);
                     log.info("Created fine for loan {}: amount={}", loan.getId(), finalAmount);
+
                 }
         );
     }

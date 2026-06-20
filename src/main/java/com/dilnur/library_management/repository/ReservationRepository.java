@@ -24,5 +24,10 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
     boolean existsByBookAndStatus(Book book, ReservationStatus status);
 
     Page<Reservation> findByMemberId(UUID memberId, Pageable pageable);
+
     List<Reservation> findByStatusAndExpiresAtBefore(ReservationStatus status, LocalDate date);
+
+    boolean existsByMemberAndStatusIn(Member member, List<ReservationStatus> statuses);
+
+    boolean existsByBookAndStatusIn(Book book, List<ReservationStatus> statuses);
 }

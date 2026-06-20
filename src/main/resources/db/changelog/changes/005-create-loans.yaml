@@ -136,3 +136,43 @@ databaseChangeLog:
                   name: book_id
               - column:
                   name: status
+
+  - changeSet:
+      id: 006-loans-add-original-due-date
+      author: dilnur
+      changes:
+        - addColumn:
+            tableName: loans
+            columns:
+              - column:
+                  name: original_due_date
+                  type: DATE
+      rollback:
+        - dropColumn:
+            tableName: loans
+            columnName: original_due_date
+
+  - changeSet:
+      id: 006.1-loans-backfill-original-due-date
+      author: dilnur
+      changes:
+        - sql:
+            sql: >
+              UPDATE loans
+              SET original_due_date = due_date
+              WHERE original_due_date IS NULL;
+      rollback:
+        - empty: true
+
+  - changeSet:
+      id: 006.2-loans-original-due-date-not-null
+      author: dilnur
+      changes:
+        - addNotNullConstraint:
+            tableName: loans
+            columnName: original_due_date
+            columnDataType: DATE
+      rollback:
+        - dropNotNullConstraint:
+            tableName: loans
+            columnName: original_due_date

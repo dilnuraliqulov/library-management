@@ -28,13 +28,14 @@ public class Loan {
     @JoinColumn(name = "book_id", nullable = false)
     private Book book;
 
-
     @Column(nullable = false,updatable = false)
     private LocalDate loanedAt = LocalDate.now();
 
+    @Column(name = "original_due_date", nullable = false, updatable = false)
+    private LocalDate originalDueDate;
+
     @Column(nullable = false)
     private LocalDate dueDate;
-
 
     private LocalDate returnedAt;
 

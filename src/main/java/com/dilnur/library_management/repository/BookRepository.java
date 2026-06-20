@@ -1,5 +1,6 @@
 package com.dilnur.library_management.repository;
 
+import com.dilnur.library_management.entity.Author;
 import com.dilnur.library_management.entity.Book;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -51,5 +52,7 @@ public interface BookRepository extends JpaRepository<Book, UUID> {
        AND b.availableCopies < b.totalCopies
 """)
     int incrementAvailableCopies(UUID bookId);
+
+    boolean existsByAuthorsContaining(Author author);
 
 }

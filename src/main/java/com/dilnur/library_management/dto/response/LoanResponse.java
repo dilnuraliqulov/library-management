@@ -15,9 +15,11 @@ public record LoanResponse(
         LocalDate dueDate,
         LocalDate returnedAt,
         LoanStatus status,
-        BigDecimal price
+        LocalDate originalDueDate,
+        int extensionCount
 
-        ) {
+
+) {
     public record MemberSummary(UUID id, String firstName, String lastName) {}
     public record BookSummary(UUID id, String title, String isbn) {}
 }

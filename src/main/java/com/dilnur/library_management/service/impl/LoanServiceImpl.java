@@ -69,6 +69,8 @@ public class LoanServiceImpl implements LoanService {
 
         Book book = bookService.getBookEntityById(request.bookId());
 
+        LocalDate dueDate = LocalDate.now().plusDays(loanProperties.getPeriodDays());
+
         // check if member has a NOTIFIED reservation for this book
         Optional<Reservation> notifiedReservation = reservationRepository
                 .findByMemberAndBookAndStatus(member, book, ReservationStatus.NOTIFIED);
@@ -87,7 +89,8 @@ public class LoanServiceImpl implements LoanService {
             Loan loan = new Loan();
             loan.setMember(member);
             loan.setBook(book);
-            loan.setDueDate(LocalDate.now().plusDays(loanProperties.getPeriodDays()));
+            loan.setDueDate(dueDate);
+            loan.setOriginalDueDate(dueDate);
             loan.setStatus(LoanStatus.ACTIVE);
 
             Loan saved = loanRepository.save(loan);
@@ -98,16 +101,16 @@ public class LoanServiceImpl implements LoanService {
         Loan loan = new Loan();
         loan.setMember(member);
         loan.setBook(book);
-        loan.setDueDate(LocalDate.now().plusDays(loanProperties.getPeriodDays()));
+        loan.setDueDate(dueDate);
+        loan.setOriginalDueDate(dueDate);
         loan.setStatus(LoanStatus.ACTIVE);
 
         bookService.decreaseAvailableCopies(book.getId());
 
         Loan saved = loanRepository.save(loan);
         return loanMapper.toResponse(saved);
+
     }
-
-
     @Override
     public LoanResponse returnBook(UUID memberId, UUID bookId) {
 
@@ -123,9 +126,8 @@ public class LoanServiceImpl implements LoanService {
         loan.setStatus(LoanStatus.RETURNED);
         Loan updated = loanRepository.save(loan);
 
-        // delegate to FineService — single source of truth
-        if (LocalDate.now().isAfter(loan.getDueDate())) {
-            fineService.calculateAndSaveFine(loan);  // ← delegate, don't duplicate
+        if (loan.getReturnedAt() != null && loan.getReturnedAt().isAfter(loan.getDueDate())) {
+            fineService.calculateAndSaveFine(loan);
         }
 
         bookService.increaseAvailableCopiesOrFulfillReservation(book.getId());
@@ -152,11 +154,13 @@ public class LoanServiceImpl implements LoanService {
             throw new BusinessRuleException("Maximum number of extensions reached for this loan");
         }
 
-        boolean hasPendingReservation = reservationRepository
-                .existsByBookAndStatus(loan.getBook(), ReservationStatus.PENDING);
+        boolean hasActiveReservation = reservationRepository
+                .existsByBookAndStatusIn(loan.getBook(),
+                        List.of(ReservationStatus.PENDING, ReservationStatus.NOTIFIED));
 
-        if (hasPendingReservation) {
-            throw new BusinessRuleException("Cannot extend — another member is waiting for this book");
+        if (hasActiveReservation) {
+            throw new BusinessRuleException(
+                    "Cannot extend — another member is waiting for this book");
         }
 
         loan.setDueDate(loan.getDueDate().plusDays(loanProperties.getExtensionDays()));

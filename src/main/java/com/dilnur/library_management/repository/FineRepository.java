@@ -9,6 +9,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
@@ -38,4 +39,7 @@ public interface FineRepository extends JpaRepository<Fine, UUID> {
 
     @Query("SELECT COALESCE(SUM(f.amount), 0) FROM Fine f WHERE f.status = 'PAID'")
     BigDecimal totalPaidFines();
+
+    @Query("SELECT COALESCE(SUM(f.amount), 0) FROM Fine f WHERE f.loan.member = :member AND f.status = 'UNPAID'")
+    BigDecimal sumUnpaidByMember(@Param("member") Member member);
 }
